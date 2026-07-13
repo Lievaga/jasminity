@@ -27,7 +27,7 @@ class GameScene extends Phaser.Scene {
 
   private alarmClock!: Phaser.Physics.Arcade.Image;
   private coffee!: Phaser.Physics.Arcade.Image;
-  private toilet!: Phaser.Physics.Arcade.Image;
+  private exitDoor!: Phaser.Physics.Arcade.Image;
 
   private urgency = 0;
   private urgencyMax = 100;
@@ -47,10 +47,10 @@ class GameScene extends Phaser.Scene {
 
   private gameStarted = false;
   private gameOver = false;
-  private gameWon = false;
+  private levelComplete = false;
   private alarmDisabled = false;
   private coffeeCollected = false;
-  private toiletWarningActive = false;
+  private exitWarningActive = false;
 
   private triggeredObstacles = new Set<string>();
 
@@ -89,10 +89,10 @@ class GameScene extends Phaser.Scene {
 
     this.gameStarted = false;
     this.gameOver = false;
-    this.gameWon = false;
+    this.levelComplete = false;
     this.alarmDisabled = false;
     this.coffeeCollected = false;
-    this.toiletWarningActive = false;
+    this.exitWarningActive = false;
 
     this.triggeredObstacles.clear();
 
@@ -104,7 +104,7 @@ class GameScene extends Phaser.Scene {
     this.createPlatformTexture();
     this.createAlarmClockTexture();
     this.createCoffeeTexture();
-    this.createToiletTexture();
+    this.createExitDoorTexture();
 
     this.createSlipperTexture();
     this.createLaundryBasketTexture();
@@ -117,7 +117,7 @@ class GameScene extends Phaser.Scene {
     this.createAlarmClock();
     this.createCoffee();
     this.createObstacles();
-    this.createToilet();
+    this.createExitDoor();
     this.createControls();
     this.createHud();
     this.createStartScreen();
@@ -144,7 +144,7 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (this.gameOver || this.gameWon) {
+    if (this.gameOver || this.levelComplete) {
       if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
         this.scene.restart();
       }
@@ -186,7 +186,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(101);
 
     const description = this.add
-      .text(480, 235, "Coffee first. Toilet urgently.", {
+      .text(480, 235, "Coffee first. Metro next.", {
         fontFamily: "Arial",
         fontSize: "24px",
         color: "#cbd5e1",
@@ -199,7 +199,7 @@ class GameScene extends Phaser.Scene {
       .text(
         480,
         285,
-        "Turn off the alarm, drink coffee and avoid the mess.",
+        "Turn off the alarm, drink coffee and reach the exit.",
         {
           fontFamily: "Arial",
           fontSize: "18px",
@@ -502,7 +502,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(-2);
 
     this.add
-      .text(2720, 175, "BATHROOM", {
+      .text(2720, 175, "FRONT HALL", {
         fontFamily: "Arial",
         fontSize: "26px",
         color: "#334155",
@@ -511,7 +511,7 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(3030, 175, "FINISH", {
+      .text(3030, 175, "EXIT", {
         fontFamily: "Arial",
         fontSize: "28px",
         color: "#15803d",
@@ -569,7 +569,7 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(2660, 455, "Almost there!", {
+      .text(2660, 455, "The metro won't wait!", {
         fontFamily: "Arial",
         fontSize: "20px",
         color: "#b91c1c",
@@ -657,7 +657,7 @@ class GameScene extends Phaser.Scene {
     if (
       this.alarmDisabled ||
       this.gameOver ||
-      this.gameWon
+      this.levelComplete
     ) {
       return;
     }
@@ -822,7 +822,7 @@ class GameScene extends Phaser.Scene {
     if (
       !this.gameStarted ||
       this.gameOver ||
-      this.gameWon
+      this.levelComplete
     ) {
       return;
     }
@@ -908,31 +908,208 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  private createToilet() {
-    this.toilet = this.physics.add.staticImage(
+  private createExitDoor() {
+    this.exitDoor = this.physics.add.staticImage(
       3030,
-      440,
-      "toilet"
+      416,
+      "exit-door"
     );
 
-    this.toilet.setDepth(4);
+    this.exitDoor.setDepth(4);
 
     this.physics.add.overlap(
       this.player,
-      this.toilet,
-      this.reachToilet,
+      this.exitDoor,
+      this.reachExitDoor,
       undefined,
       this
     );
 
     this.add
-      .text(3030, 365, "TOILET", {
+      .text(3030, 300, "FRONT DOOR", {
         fontFamily: "Arial",
         fontSize: "20px",
         color: "#166534",
         fontStyle: "bold",
       })
       .setOrigin(0.5);
+  }
+
+  private reachExitDoor() {
+    if (this.gameOver || this.levelComplete) {
+      return;
+    }
+
+    if (!this.coffeeCollected) {
+      if (this.exitWarningActive) {
+        return;
+      }
+
+      this.exitWarningActive = true;
+
+      const coffeeFirstText = this.add
+        .text(
+          480,
+          165,
+          "You forgot the coffee!",
+          {
+            fontFamily: "Arial",
+            fontSize: "30px",
+            color: "#ffffff",
+            backgroundColor: "#dc2626",
+            fontStyle: "bold",
+            padding: {
+              x: 18,
+              y: 10,
+            },
+          }
+        )
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(30);
+
+      const returnText = this.add
+        .text(
+          480,
+          220,
+          "Go back before leaving home.",
+          {
+            fontFamily: "Arial",
+            fontSize: "19px",
+            color: "#1f2937",
+            backgroundColor: "#ffffff",
+            padding: {
+              x: 14,
+              y: 8,
+            },
+          }
+        )
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(30);
+
+      this.cameras.main.shake(180, 0.004);
+
+      this.time.delayedCall(1500, () => {
+        coffeeFirstText.destroy();
+        returnText.destroy();
+        this.exitWarningActive = false;
+      });
+
+      return;
+    }
+
+    this.completeLevel();
+  }
+
+  private completeLevel() {
+    this.levelComplete = true;
+
+    this.objectiveText.setText(
+      "LEVEL 1 COMPLETE"
+    );
+
+    this.player.setVelocity(0, 0);
+    this.physics.pause();
+
+    this.cameras.main.flash(
+      400,
+      255,
+      255,
+      255
+    );
+
+    this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(50);
+
+    this.add
+      .text(
+        480,
+        155,
+        "LEVEL 1 COMPLETE",
+        {
+          fontFamily: "Arial",
+          fontSize: "50px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        235,
+        "Jasmin escaped the apartment.",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        290,
+        `Urgency continues: ${Math.floor(
+          this.urgency
+        )}%`,
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#fca5a5",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        345,
+        "NEXT STOP: THE METRO",
+        {
+          fontFamily: "Arial",
+          fontSize: "28px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        410,
+        "Press R to replay Level 1",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
   }
 
   private createControls() {
@@ -1135,7 +1312,7 @@ class GameScene extends Phaser.Scene {
     if (
       this.coffeeCollected ||
       this.gameOver ||
-      this.gameWon
+      this.levelComplete
     ) {
       return;
     }
@@ -1200,7 +1377,7 @@ class GameScene extends Phaser.Scene {
     this.coffeeCollected = true;
 
     this.objectiveText.setText(
-      "OBJECTIVE: REACH THE TOILET"
+      "OBJECTIVE: REACH THE EXIT"
     );
 
     this.currentMoveSpeed =
@@ -1253,7 +1430,7 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.shake(250, 0.006);
 
     this.time.delayedCall(6000, () => {
-      if (this.gameOver || this.gameWon) {
+      if (this.gameOver || this.levelComplete) {
         return;
       }
 
@@ -1295,164 +1472,6 @@ class GameScene extends Phaser.Scene {
         finishedText.destroy();
       });
     });
-  }
-
-  private reachToilet() {
-    if (this.gameOver || this.gameWon) {
-      return;
-    }
-
-    if (!this.coffeeCollected) {
-      if (this.toiletWarningActive) {
-        return;
-      }
-
-      this.toiletWarningActive = true;
-
-      const coffeeFirstText = this.add
-        .text(
-          480,
-          165,
-          "You forgot the coffee!",
-          {
-            fontFamily: "Arial",
-            fontSize: "30px",
-            color: "#ffffff",
-            backgroundColor: "#dc2626",
-            fontStyle: "bold",
-            padding: {
-              x: 18,
-              y: 10,
-            },
-          }
-        )
-        .setOrigin(0.5)
-        .setScrollFactor(0)
-        .setDepth(30);
-
-      const returnText = this.add
-        .text(
-          480,
-          220,
-          "Go back to the coffee table.",
-          {
-            fontFamily: "Arial",
-            fontSize: "19px",
-            color: "#1f2937",
-            backgroundColor: "#ffffff",
-            padding: {
-              x: 14,
-              y: 8,
-            },
-          }
-        )
-        .setOrigin(0.5)
-        .setScrollFactor(0)
-        .setDepth(30);
-
-      this.cameras.main.shake(180, 0.004);
-
-      this.time.delayedCall(1500, () => {
-        coffeeFirstText.destroy();
-        returnText.destroy();
-        this.toiletWarningActive = false;
-      });
-
-      return;
-    }
-
-    this.gameWon = true;
-    this.urgency = 0;
-
-    this.objectiveText.setText(
-      "OBJECTIVE COMPLETE"
-    );
-
-    this.updateUrgencyDisplay();
-
-    this.player.setVelocity(0, 0);
-    this.physics.pause();
-
-    this.cameras.main.flash(
-      400,
-      255,
-      255,
-      255
-    );
-
-    this.add
-      .rectangle(
-        480,
-        270,
-        960,
-        540,
-        0x0f172a,
-        0.88
-      )
-      .setScrollFactor(0)
-      .setDepth(50);
-
-    this.add
-      .text(
-        480,
-        185,
-        "MISSION COMPLETE",
-        {
-          fontFamily: "Arial",
-          fontSize: "54px",
-          color: "#86efac",
-          fontStyle: "bold",
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(51);
-
-    this.add
-      .text(
-        480,
-        265,
-        "Jasmin reached the toilet.",
-        {
-          fontFamily: "Arial",
-          fontSize: "25px",
-          color: "#ffffff",
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(51);
-
-    this.add
-      .text(
-        480,
-        320,
-        "The urgency is finally zero.",
-        {
-          fontFamily: "Arial",
-          fontSize: "20px",
-          color: "#cbd5e1",
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(51);
-
-    this.add
-      .text(
-        480,
-        390,
-        "Press R to play again",
-        {
-          fontFamily: "Arial",
-          fontSize: "22px",
-          color: "#facc15",
-          fontStyle: "bold",
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(51);
   }
 
   private createUrgencyBar() {
@@ -1498,7 +1517,7 @@ class GameScene extends Phaser.Scene {
   }
 
   private showGameOver() {
-    if (this.gameOver || this.gameWon) {
+    if (this.gameOver || this.levelComplete) {
       return;
     }
 
@@ -2017,32 +2036,36 @@ class GameScene extends Phaser.Scene {
     graphics.destroy();
   }
 
-  private createToiletTexture() {
-    if (this.textures.exists("toilet")) {
-      this.textures.remove("toilet");
+  private createExitDoorTexture() {
+    if (this.textures.exists("exit-door")) {
+      this.textures.remove("exit-door");
     }
 
     const graphics = this.add.graphics();
 
-    graphics.fillStyle(0xf8fafc);
-    graphics.fillRoundedRect(7, 0, 38, 34, 7);
+    graphics.fillStyle(0x78350f);
+    graphics.fillRoundedRect(4, 2, 72, 116, 6);
 
-    graphics.fillStyle(0xe2e8f0);
-    graphics.fillRoundedRect(3, 28, 46, 22, 8);
+    graphics.fillStyle(0xb45309);
+    graphics.fillRoundedRect(11, 9, 58, 102, 4);
 
-    graphics.fillStyle(0xffffff);
-    graphics.fillEllipse(26, 40, 40, 20);
+    graphics.lineStyle(4, 0x5b2c0a);
+    graphics.strokeRoundedRect(11, 9, 58, 102, 4);
 
-    graphics.fillStyle(0x93c5fd);
-    graphics.fillEllipse(26, 40, 25, 10);
+    graphics.fillStyle(0xfacc15);
+    graphics.fillCircle(58, 62, 5);
 
-    graphics.fillStyle(0xf8fafc);
-    graphics.fillRoundedRect(16, 46, 22, 24, 5);
+    graphics.fillStyle(0xfef3c7);
+    graphics.fillRoundedRect(22, 19, 36, 24, 4);
+
+    graphics.fillStyle(0x166534);
+    graphics.fillTriangle(31, 26, 31, 36, 43, 31);
+    graphics.fillRect(42, 29, 9, 5);
 
     graphics.generateTexture(
-      "toilet",
-      52,
-      72
+      "exit-door",
+      80,
+      120
     );
 
     graphics.destroy();
