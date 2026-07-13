@@ -6150,14 +6150,28 @@ class BunScene extends Phaser.Scene {
       return;
     }
 
-    if (
-      this.gameOver ||
-      this.levelComplete
-    ) {
+    if (this.gameOver) {
       if (
         Phaser.Input.Keyboard.JustDown(this.restartKey)
       ) {
         this.scene.restart();
+      }
+
+      return;
+    }
+
+    if (this.levelComplete) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.restartKey)
+      ) {
+        this.scene.restart();
+      }
+
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.scene.start("TrainHomeScene");
       }
 
       return;
@@ -7175,14 +7189,45 @@ class BunScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(51);
 
-    this.add
+    const trainButton = this.add
+      .rectangle(
+        480,
+        405,
+        370,
+        62,
+        0xdc2626
+      )
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(51)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const trainButtonText = this.add
       .text(
         480,
         405,
-        "The journey home continues next.",
+        "CONTINUE TO TRAIN HOME",
         {
           fontFamily: "Arial",
-          fontSize: "20px",
+          fontSize: "22px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(52);
+
+    this.add
+      .text(
+        480,
+        465,
+        "Click · Enter · Space     |     R replay bun level",
+        {
+          fontFamily: "Arial",
+          fontSize: "16px",
           color: "#cbd5e1",
         }
       )
@@ -7190,20 +7235,21 @@ class BunScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(51);
 
-    this.add
-      .text(
-        480,
-        455,
-        "Press R to replay the bun level",
-        {
-          fontFamily: "Arial",
-          fontSize: "17px",
-          color: "#ffffff",
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(51);
+    trainButton.on("pointerover", () => {
+      trainButton.setFillStyle(0xb91c1c);
+      trainButton.setScale(1.03);
+      trainButtonText.setScale(1.03);
+    });
+
+    trainButton.on("pointerout", () => {
+      trainButton.setFillStyle(0xdc2626);
+      trainButton.setScale(1);
+      trainButtonText.setScale(1);
+    });
+
+    trainButton.on("pointerdown", () => {
+      this.scene.start("TrainHomeScene");
+    });
   }
 
   private createControls() {
@@ -8066,6 +8112,1890 @@ class BunScene extends Phaser.Scene {
   }
 }
 
+
+class TrainHomeScene extends Phaser.Scene {
+  private player!: Phaser.Physics.Arcade.Sprite;
+  private platforms!: Phaser.Physics.Arcade.StaticGroup;
+  private trainPassengers!: Phaser.Physics.Arcade.StaticGroup;
+  private trainObstacles!: Phaser.Physics.Arcade.StaticGroup;
+  private brokenDoor!: Phaser.Physics.Arcade.Image;
+
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+
+  private wasd!: {
+    left: Phaser.Input.Keyboard.Key;
+    right: Phaser.Input.Keyboard.Key;
+    up: Phaser.Input.Keyboard.Key;
+  };
+
+  private restartKey!: Phaser.Input.Keyboard.Key;
+  private enterKey!: Phaser.Input.Keyboard.Key;
+
+  private urgency = 0;
+  private urgencyMax = 100;
+  private urgencySpeed = 4.2;
+
+  private urgencyBar!: Phaser.GameObjects.Rectangle;
+  private urgencyText!: Phaser.GameObjects.Text;
+  private objectiveText!: Phaser.GameObjects.Text;
+
+  private gameStarted = false;
+  private gameOver = false;
+  private levelComplete = false;
+  private trainBroken = false;
+  private exitWarningActive = false;
+
+  private triggeredPassengers = new Set<string>();
+  private triggeredObstacles = new Set<string>();
+
+  private currentPlayerTexture = "jasmin-idle";
+  private walkFrame = 0;
+  private lastWalkFrameSwitch = 0;
+
+  private readonly gameHeight = 540;
+  private readonly worldWidth = 3400;
+  private readonly moveSpeed = 225;
+  private readonly jumpVelocity = -435;
+
+  constructor() {
+    super("TrainHomeScene");
+  }
+
+  create() {
+    this.physics.world.resume();
+
+    this.cameras.main.setBackgroundColor("#e2e8f0");
+
+    this.physics.world.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.cameras.main.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.urgency = 0;
+    this.urgencySpeed = 4.2;
+
+    this.gameStarted = false;
+    this.gameOver = false;
+    this.levelComplete = false;
+    this.trainBroken = false;
+    this.exitWarningActive = false;
+
+    this.triggeredPassengers.clear();
+    this.triggeredObstacles.clear();
+
+    this.currentPlayerTexture = "jasmin-idle";
+    this.walkFrame = 0;
+    this.lastWalkFrameSwitch = 0;
+
+    this.createTrainHomeTextures();
+    this.createBackground();
+    this.createLevel();
+    this.createPlayer();
+    this.createPassengers();
+    this.createObstacles();
+    this.createBrokenDoor();
+    this.createControls();
+    this.createHud();
+    this.createStartScreen();
+
+    this.cameras.main.startFollow(
+      this.player,
+      true,
+      0.08,
+      0.08
+    );
+
+    this.cameras.main.setDeadzone(260, 180);
+
+    this.time.delayedCall(6500, () => {
+      this.breakTrain();
+    });
+  }
+
+  update(time: number, delta: number) {
+    if (!this.gameStarted) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.startTrain();
+      }
+
+      return;
+    }
+
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.restartKey)
+      ) {
+        this.scene.restart();
+      }
+
+      return;
+    }
+
+    this.updatePlayerMovement();
+    this.updatePlayerAppearance(time);
+    this.updateUrgency(delta);
+  }
+
+  private createStartScreen() {
+    const overlay = this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(100);
+
+    const levelText = this.add
+      .text(480, 90, "LEVEL 5", {
+        fontFamily: "Arial",
+        fontSize: "21px",
+        color: "#facc15",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const title = this.add
+      .text(
+        480,
+        150,
+        "THE TRAIN HOME",
+        {
+          fontFamily: "Arial",
+          fontSize: "50px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const objective = this.add
+      .text(
+        480,
+        215,
+        "OBJECTIVE: REACH THE LAST CARRIAGE",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const urgencyText = this.add
+      .text(
+        480,
+        265,
+        "Starting urgency: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#fca5a5",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const instruction = this.add
+      .text(
+        480,
+        310,
+        "Move through passengers and luggage.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const button = this.add
+      .rectangle(
+        480,
+        400,
+        320,
+        68,
+        0xdc2626
+      )
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(101)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const buttonText = this.add
+      .text(
+        480,
+        400,
+        "BOARD THE TRAIN",
+        {
+          fontFamily: "Arial",
+          fontSize: "26px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(102);
+
+    const keyboardText = this.add
+      .text(
+        480,
+        465,
+        "Click · Enter · Space",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const objects = [
+      overlay,
+      levelText,
+      title,
+      objective,
+      urgencyText,
+      instruction,
+      button,
+      buttonText,
+      keyboardText,
+    ];
+
+    button.on("pointerover", () => {
+      button.setFillStyle(0xb91c1c);
+      button.setScale(1.03);
+      buttonText.setScale(1.03);
+    });
+
+    button.on("pointerout", () => {
+      button.setFillStyle(0xdc2626);
+      button.setScale(1);
+      buttonText.setScale(1);
+    });
+
+    button.on("pointerdown", () => {
+      this.startTrain();
+    });
+
+    this.events.once("start-train-home", () => {
+      objects.forEach((object) => {
+        if (object.active) {
+          object.destroy();
+        }
+      });
+    });
+  }
+
+  private startTrain() {
+    if (this.gameStarted) {
+      return;
+    }
+
+    this.gameStarted = true;
+    this.events.emit("start-train-home");
+
+    this.cameras.main.flash(
+      250,
+      255,
+      255,
+      255
+    );
+
+    this.showMessage(
+      "HOMEWARD BOUND!",
+      "Surely nothing will go wrong.",
+      0xdc2626
+    );
+  }
+
+  private breakTrain() {
+    if (
+      this.trainBroken ||
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    this.trainBroken = true;
+
+    this.objectiveText.setText(
+      "OBJECTIVE: EXIT THE BROKEN TRAIN"
+    );
+
+    this.cameras.main.shake(
+      900,
+      0.012
+    );
+
+    this.cameras.main.flash(
+      250,
+      255,
+      80,
+      80
+    );
+
+    this.showMessage(
+      "THE TRAIN BROKE DOWN!",
+      "Of course it did. Reach the emergency exit.",
+      0x991b1b
+    );
+  }
+
+  private createBackground() {
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        250,
+        this.worldWidth,
+        500,
+        0xe2e8f0
+      )
+      .setDepth(-10);
+
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        455,
+        this.worldWidth,
+        110,
+        0x94a3b8
+      )
+      .setDepth(-9);
+
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        135,
+        this.worldWidth,
+        18,
+        0xdc2626
+      )
+      .setDepth(-8);
+
+    for (
+      let x = 0;
+      x < this.worldWidth;
+      x += 310
+    ) {
+      this.add
+        .rectangle(
+          x + 155,
+          255,
+          205,
+          120,
+          0xbfe8ff
+        )
+        .setStrokeStyle(
+          7,
+          0x475569
+        )
+        .setDepth(-6);
+
+      this.add
+        .rectangle(
+          x + 155,
+          255,
+          8,
+          120,
+          0x475569
+        )
+        .setDepth(-5);
+
+      this.add
+        .rectangle(
+          x + 20,
+          330,
+          90,
+          85,
+          0xdc2626
+        )
+        .setStrokeStyle(
+          5,
+          0x7f1d1d
+        )
+        .setDepth(-4);
+
+      this.add
+        .rectangle(
+          x + 290,
+          330,
+          90,
+          85,
+          0xdc2626
+        )
+        .setStrokeStyle(
+          5,
+          0x7f1d1d
+        )
+        .setDepth(-4);
+    }
+
+    this.add
+      .text(
+        160,
+        165,
+        "S7 · HOME",
+        {
+          fontFamily: "Arial",
+          fontSize: "30px",
+          color: "#b91c1c",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        980,
+        165,
+        "CARRIAGE 1",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#334155",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        1900,
+        165,
+        "CARRIAGE 2",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#334155",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        2800,
+        165,
+        "LAST CARRIAGE",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#334155",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        3240,
+        165,
+        "EMERGENCY EXIT",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#b91c1c",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private createLevel() {
+    this.platforms =
+      this.physics.add.staticGroup();
+
+    this.platforms
+      .create(
+        this.worldWidth / 2,
+        515,
+        "platform"
+      )
+      .setScale(
+        this.worldWidth / 40,
+        1
+      )
+      .refreshBody();
+
+    this.createPlatform(430, 415, 3);
+    this.createPlatform(680, 350, 3);
+    this.createPlatform(930, 410, 4);
+
+    this.createPlatform(1180, 360, 3);
+    this.createPlatform(1430, 300, 3);
+    this.createPlatform(1680, 390, 3);
+
+    this.createPlatform(1930, 340, 4);
+    this.createPlatform(2190, 285, 3);
+    this.createPlatform(2440, 390, 4);
+
+    this.createPlatform(2700, 335, 3);
+    this.createPlatform(2970, 390, 3);
+
+    this.add
+      .text(
+        90,
+        470,
+        "BOARDING",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        1500,
+        455,
+        "Why is every seat occupied?",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#475569",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        2770,
+        455,
+        "Something sounds expensive.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#b91c1c",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private createPlatform(
+    x: number,
+    y: number,
+    scaleX: number
+  ) {
+    this.platforms
+      .create(x, y, "platform")
+      .setScale(scaleX, 1)
+      .refreshBody();
+  }
+
+  private createPlayer() {
+    this.player = this.physics.add.sprite(
+      100,
+      426,
+      "jasmin-idle"
+    );
+
+    this.player.setCollideWorldBounds(true);
+    this.player.setBounce(0.05);
+    this.player.setDepth(5);
+
+    this.physics.add.collider(
+      this.player,
+      this.platforms
+    );
+
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    body.setSize(30, 60);
+    body.setOffset(13, 12);
+  }
+
+  private createPassengers() {
+    this.trainPassengers =
+      this.physics.add.staticGroup();
+
+    const data = [
+      {
+        x: 790,
+        key: "train-passenger-blue",
+        id: "train-passenger-1",
+        message:
+          "A passenger is blocking both directions.",
+      },
+      {
+        x: 1220,
+        key: "train-passenger-green",
+        id: "train-passenger-2",
+        message:
+          "Someone is standing directly at the door.",
+      },
+      {
+        x: 1740,
+        key: "train-passenger-blue",
+        id: "train-passenger-3",
+        message:
+          "A backpack needs its own ticket.",
+      },
+      {
+        x: 2260,
+        key: "train-passenger-green",
+        id: "train-passenger-4",
+        message:
+          "The aisle has become a meeting room.",
+      },
+      {
+        x: 2780,
+        key: "train-passenger-blue",
+        id: "train-passenger-5",
+        message:
+          "Nobody knows where to stand.",
+      },
+    ];
+
+    data.forEach((item) => {
+      const passenger =
+        this.trainPassengers
+          .create(
+            item.x,
+            447,
+            item.key
+          )
+          .setDepth(4);
+
+      passenger.setData(
+        "passengerId",
+        item.id
+      );
+
+      passenger.setData(
+        "message",
+        item.message
+      );
+    });
+
+    this.physics.add.overlap(
+      this.player,
+      this.trainPassengers,
+      this.hitPassenger,
+      undefined,
+      this
+    );
+  }
+
+  private hitPassenger(
+    _playerObject: ArcadeCollisionObject,
+    passengerObject: ArcadeCollisionObject
+  ) {
+    if (
+      !this.gameStarted ||
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    const passenger =
+      passengerObject as Phaser.Physics.Arcade.Image;
+
+    const passengerId =
+      passenger.getData("passengerId") as string;
+
+    const message =
+      passenger.getData("message") as string;
+
+    if (
+      this.triggeredPassengers.has(passengerId)
+    ) {
+      return;
+    }
+
+    this.triggeredPassengers.add(passengerId);
+
+    passenger.disableBody(false, false);
+    passenger.setAlpha(0.45);
+
+    this.addUrgency(4);
+
+    this.player.setVelocityX(-285);
+    this.player.setVelocityY(-165);
+
+    this.cameras.main.shake(
+      190,
+      0.007
+    );
+
+    this.showMessage(
+      message,
+      "+4% TOILET URGENCY",
+      0xb45309
+    );
+  }
+
+  private createObstacles() {
+    this.trainObstacles =
+      this.physics.add.staticGroup();
+
+    const data = [
+      {
+        x: 1030,
+        y: 450,
+        key: "train-suitcase",
+        id: "suitcase",
+        label: "SUITCASE",
+        message:
+          "A suitcase occupies the entire aisle.",
+      },
+      {
+        x: 2020,
+        y: 452,
+        key: "train-coffee",
+        id: "train-coffee",
+        label: "SPILLED COFFEE",
+        message:
+          "Not your coffee. Still your problem.",
+      },
+      {
+        x: 2520,
+        y: 447,
+        key: "train-newspaper",
+        id: "newspaper",
+        label: "NEWSPAPER",
+        message:
+          "Breaking news: floor still slippery.",
+      },
+    ];
+
+    data.forEach((item) => {
+      const obstacle =
+        this.trainObstacles
+          .create(
+            item.x,
+            item.y,
+            item.key
+          )
+          .setDepth(4);
+
+      obstacle.setData(
+        "obstacleId",
+        item.id
+      );
+
+      obstacle.setData(
+        "message",
+        item.message
+      );
+
+      this.add
+        .text(
+          item.x,
+          item.y - 62,
+          item.label,
+          {
+            fontFamily: "Arial",
+            fontSize: "14px",
+            color: "#7c2d12",
+            fontStyle: "bold",
+          }
+        )
+        .setOrigin(0.5);
+    });
+
+    this.physics.add.overlap(
+      this.player,
+      this.trainObstacles,
+      this.hitObstacle,
+      undefined,
+      this
+    );
+  }
+
+  private hitObstacle(
+    _playerObject: ArcadeCollisionObject,
+    obstacleObject: ArcadeCollisionObject
+  ) {
+    if (
+      !this.gameStarted ||
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    const obstacle =
+      obstacleObject as Phaser.Physics.Arcade.Image;
+
+    const obstacleId =
+      obstacle.getData("obstacleId") as string;
+
+    const message =
+      obstacle.getData("message") as string;
+
+    if (
+      this.triggeredObstacles.has(obstacleId)
+    ) {
+      return;
+    }
+
+    this.triggeredObstacles.add(obstacleId);
+
+    obstacle.disableBody(false, false);
+    obstacle.setAlpha(0.45);
+
+    this.addUrgency(5);
+
+    this.player.setVelocityX(-300);
+    this.player.setVelocityY(-170);
+
+    this.cameras.main.shake(
+      220,
+      0.008
+    );
+
+    this.cameras.main.flash(
+      120,
+      255,
+      80,
+      80
+    );
+
+    this.showMessage(
+      message,
+      "+5% TOILET URGENCY",
+      0xb91c1c
+    );
+  }
+
+  private createBrokenDoor() {
+    this.brokenDoor =
+      this.physics.add.staticImage(
+        3240,
+        416,
+        "broken-train-door"
+      );
+
+    this.brokenDoor.setDepth(4);
+
+    this.physics.add.overlap(
+      this.player,
+      this.brokenDoor,
+      this.reachBrokenDoor,
+      undefined,
+      this
+    );
+
+    this.add
+      .text(
+        3240,
+        300,
+        "EMERGENCY DOOR",
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#b91c1c",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private reachBrokenDoor() {
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    if (!this.trainBroken) {
+      if (this.exitWarningActive) {
+        return;
+      }
+
+      this.exitWarningActive = true;
+
+      this.showMessage(
+        "The train is still moving!",
+        "Wait for something to go wrong.",
+        0x475569
+      );
+
+      this.time.delayedCall(1500, () => {
+        this.exitWarningActive = false;
+      });
+
+      return;
+    }
+
+    this.completeLevel();
+  }
+
+  private completeLevel() {
+    this.levelComplete = true;
+
+    this.objectiveText.setText(
+      "LEVEL 5 COMPLETE"
+    );
+
+    this.player.setVelocity(0, 0);
+    this.physics.pause();
+
+    this.cameras.main.flash(
+      400,
+      255,
+      255,
+      255
+    );
+
+    this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.91
+      )
+      .setScrollFactor(0)
+      .setDepth(50);
+
+    this.add
+      .text(
+        480,
+        140,
+        "LEVEL 5 COMPLETE",
+        {
+          fontFamily: "Arial",
+          fontSize: "49px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        220,
+        "The train broke down. Jasmin escaped.",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        275,
+        `Urgency: ${Math.floor(
+          this.urgency
+        )}%`,
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#fca5a5",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        335,
+        "NEXT: FIND A BICYCLE",
+        {
+          fontFamily: "Arial",
+          fontSize: "29px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        405,
+        "The bicycle ride comes next.",
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        455,
+        "Press R to replay the train level",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+  }
+
+  private createControls() {
+    this.cursors =
+      this.input.keyboard!.createCursorKeys();
+
+    this.wasd = {
+      left: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.A
+      ),
+      right: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.D
+      ),
+      up: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.W
+      ),
+    };
+
+    this.restartKey =
+      this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.R
+      );
+
+    this.enterKey =
+      this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.ENTER
+      );
+  }
+
+  private createHud() {
+    this.add
+      .rectangle(
+        480,
+        48,
+        960,
+        96,
+        0x0f172a,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.add
+      .text(20, 16, "JASMINITY", {
+        fontFamily: "Arial",
+        fontSize: "26px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.add
+      .text(
+        20,
+        61,
+        "A / D or arrows · Space / W / Up to jump",
+        {
+          fontFamily: "Arial",
+          fontSize: "14px",
+          color: "#cbd5e1",
+        }
+      )
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.objectiveText = this.add
+      .text(
+        250,
+        24,
+        "OBJECTIVE: REACH THE LAST CARRIAGE",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(22);
+
+    this.add
+      .rectangle(
+        710,
+        62,
+        310,
+        34,
+        0x111827
+      )
+      .setStrokeStyle(3, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.urgencyBar = this.add
+      .rectangle(
+        560,
+        62,
+        0,
+        24,
+        0x22c55e
+      )
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.urgencyText = this.add
+      .text(
+        710,
+        62,
+        "TOILET URGENCY: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "16px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(22);
+
+    this.updateUrgencyDisplay();
+  }
+
+  private updatePlayerMovement() {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const movingLeft =
+      this.cursors.left.isDown ||
+      this.wasd.left.isDown;
+
+    const movingRight =
+      this.cursors.right.isDown ||
+      this.wasd.right.isDown;
+
+    if (movingLeft) {
+      this.player.setVelocityX(
+        -this.moveSpeed
+      );
+
+      this.player.setFlipX(true);
+    } else if (movingRight) {
+      this.player.setVelocityX(
+        this.moveSpeed
+      );
+
+      this.player.setFlipX(false);
+    } else {
+      this.player.setVelocityX(0);
+    }
+
+    const wantsToJump =
+      this.cursors.up.isDown ||
+      this.cursors.space.isDown ||
+      this.wasd.up.isDown;
+
+    if (
+      wantsToJump &&
+      body.blocked.down
+    ) {
+      this.player.setVelocityY(
+        this.jumpVelocity
+      );
+    }
+  }
+
+  private updatePlayerAppearance(time: number) {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const isGrounded =
+      body.blocked.down ||
+      body.touching.down;
+
+    if (!isGrounded) {
+      this.setPlayerTexture(
+        "jasmin-jump"
+      );
+
+      return;
+    }
+
+    if (
+      Math.abs(body.velocity.x) > 10
+    ) {
+      if (
+        time -
+          this.lastWalkFrameSwitch >
+        140
+      ) {
+        this.walkFrame =
+          this.walkFrame === 0
+            ? 1
+            : 0;
+
+        this.lastWalkFrameSwitch =
+          time;
+      }
+
+      this.setPlayerTexture(
+        this.walkFrame === 0
+          ? "jasmin-walk-1"
+          : "jasmin-walk-2"
+      );
+
+      return;
+    }
+
+    this.walkFrame = 0;
+
+    this.setPlayerTexture(
+      "jasmin-idle"
+    );
+  }
+
+  private setPlayerTexture(
+    textureKey: string
+  ) {
+    if (
+      this.currentPlayerTexture ===
+      textureKey
+    ) {
+      return;
+    }
+
+    this.currentPlayerTexture =
+      textureKey;
+
+    this.player.setTexture(
+      textureKey
+    );
+  }
+
+  private updateUrgency(delta: number) {
+    this.urgency +=
+      this.urgencySpeed *
+      (delta / 1000);
+
+    if (
+      this.urgency >=
+      this.urgencyMax
+    ) {
+      this.urgency =
+        this.urgencyMax;
+
+      this.updateUrgencyDisplay();
+      this.showGameOver();
+
+      return;
+    }
+
+    this.updateUrgencyDisplay();
+  }
+
+  private addUrgency(amount: number) {
+    this.urgency = Math.min(
+      this.urgencyMax,
+      this.urgency + amount
+    );
+
+    this.updateUrgencyDisplay();
+
+    if (
+      this.urgency >=
+      this.urgencyMax
+    ) {
+      this.showGameOver();
+    }
+  }
+
+  private updateUrgencyDisplay() {
+    const percentage =
+      this.urgency /
+      this.urgencyMax;
+
+    this.urgencyBar.width =
+      300 * percentage;
+
+    this.urgencyText.setText(
+      `TOILET URGENCY: ${Math.floor(
+        this.urgency
+      )}%`
+    );
+
+    if (percentage < 0.5) {
+      this.urgencyBar.setFillStyle(
+        0x22c55e
+      );
+    } else if (percentage < 0.8) {
+      this.urgencyBar.setFillStyle(
+        0xf59e0b
+      );
+    } else {
+      this.urgencyBar.setFillStyle(
+        0xef4444
+      );
+    }
+  }
+
+  private showMessage(
+    title: string,
+    subtitle: string,
+    backgroundColor: number
+  ) {
+    const titleText = this.add
+      .text(
+        480,
+        155,
+        title,
+        {
+          fontFamily: "Arial",
+          fontSize: "27px",
+          color: "#ffffff",
+          backgroundColor:
+            `#${backgroundColor
+              .toString(16)
+              .padStart(6, "0")}`,
+          fontStyle: "bold",
+          padding: {
+            x: 18,
+            y: 10,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    const subtitleText = this.add
+      .text(
+        480,
+        210,
+        subtitle,
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#1f2937",
+          backgroundColor: "#ffffff",
+          fontStyle: "bold",
+          padding: {
+            x: 14,
+            y: 8,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    this.time.delayedCall(1600, () => {
+      titleText.destroy();
+      subtitleText.destroy();
+    });
+  }
+
+  private showGameOver() {
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    this.gameOver = true;
+
+    this.objectiveText.setText(
+      "OBJECTIVE FAILED"
+    );
+
+    this.player.setVelocity(0, 0);
+    this.physics.pause();
+
+    this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x111827,
+        0.84
+      )
+      .setScrollFactor(0)
+      .setDepth(50);
+
+    this.add
+      .text(
+        480,
+        210,
+        "TOO LATE!",
+        {
+          fontFamily: "Arial",
+          fontSize: "58px",
+          color: "#ff6b6b",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        285,
+        "The train journey took too long.",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        350,
+        "Press R to restart the train level",
+        {
+          fontFamily: "Arial",
+          fontSize: "22px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+  }
+
+  private createTrainHomeTextures() {
+    this.createPassengerTexture(
+      "train-passenger-blue",
+      0x2563eb,
+      0xf4bd94
+    );
+
+    this.createPassengerTexture(
+      "train-passenger-green",
+      0x16a34a,
+      0x9a6546
+    );
+
+    this.createSuitcaseTexture();
+    this.createCoffeeSpillTexture();
+    this.createNewspaperTexture();
+    this.createBrokenDoorTexture();
+  }
+
+  private createPassengerTexture(
+    textureKey: string,
+    shirtColor: number,
+    skinColor: number
+  ) {
+    if (
+      this.textures.exists(textureKey)
+    ) {
+      this.textures.remove(textureKey);
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(skinColor);
+    graphics.fillCircle(
+      24,
+      14,
+      10
+    );
+
+    graphics.fillStyle(0x1f2937);
+    graphics.fillRoundedRect(
+      15,
+      4,
+      18,
+      7,
+      4
+    );
+
+    graphics.fillStyle(shirtColor);
+    graphics.fillRoundedRect(
+      12,
+      25,
+      24,
+      32,
+      6
+    );
+
+    graphics.lineStyle(
+      5,
+      skinColor
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(14, 30);
+    graphics.lineTo(5, 46);
+    graphics.moveTo(34, 30);
+    graphics.lineTo(43, 46);
+    graphics.strokePath();
+
+    graphics.lineStyle(
+      6,
+      0x1f2937
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(18, 55);
+    graphics.lineTo(15, 74);
+    graphics.moveTo(30, 55);
+    graphics.lineTo(33, 74);
+    graphics.strokePath();
+
+    graphics.fillStyle(0x111827);
+    graphics.fillRoundedRect(
+      35,
+      32,
+      10,
+      28,
+      4
+    );
+
+    graphics.generateTexture(
+      textureKey,
+      48,
+      78
+    );
+
+    graphics.destroy();
+  }
+
+  private createSuitcaseTexture() {
+    if (
+      this.textures.exists(
+        "train-suitcase"
+      )
+    ) {
+      this.textures.remove(
+        "train-suitcase"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0x7c3aed);
+    graphics.fillRoundedRect(
+      7,
+      15,
+      58,
+      50,
+      8
+    );
+
+    graphics.lineStyle(
+      5,
+      0x4c1d95
+    );
+
+    graphics.strokeRoundedRect(
+      7,
+      15,
+      58,
+      50,
+      8
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(24, 15);
+    graphics.lineTo(24, 5);
+    graphics.lineTo(48, 5);
+    graphics.lineTo(48, 15);
+    graphics.strokePath();
+
+    graphics.fillStyle(0x111827);
+    graphics.fillCircle(
+      20,
+      68,
+      5
+    );
+
+    graphics.fillCircle(
+      52,
+      68,
+      5
+    );
+
+    graphics.generateTexture(
+      "train-suitcase",
+      72,
+      74
+    );
+
+    graphics.destroy();
+  }
+
+  private createCoffeeSpillTexture() {
+    if (
+      this.textures.exists(
+        "train-coffee"
+      )
+    ) {
+      this.textures.remove(
+        "train-coffee"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(
+      0x78350f,
+      0.75
+    );
+
+    graphics.fillEllipse(
+      35,
+      22,
+      66,
+      28
+    );
+
+    graphics.fillCircle(
+      12,
+      16,
+      8
+    );
+
+    graphics.fillCircle(
+      55,
+      18,
+      10
+    );
+
+    graphics.generateTexture(
+      "train-coffee",
+      72,
+      40
+    );
+
+    graphics.destroy();
+  }
+
+  private createNewspaperTexture() {
+    if (
+      this.textures.exists(
+        "train-newspaper"
+      )
+    ) {
+      this.textures.remove(
+        "train-newspaper"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0xf8fafc);
+    graphics.fillRoundedRect(
+      4,
+      5,
+      68,
+      45,
+      3
+    );
+
+    graphics.lineStyle(
+      3,
+      0x475569
+    );
+
+    graphics.strokeRoundedRect(
+      4,
+      5,
+      68,
+      45,
+      3
+    );
+
+    graphics.fillStyle(0x111827);
+    graphics.fillRect(
+      10,
+      11,
+      56,
+      7
+    );
+
+    graphics.fillStyle(0x94a3b8);
+
+    for (
+      let y = 24;
+      y <= 42;
+      y += 8
+    ) {
+      graphics.fillRect(
+        10,
+        y,
+        24,
+        3
+      );
+
+      graphics.fillRect(
+        40,
+        y,
+        26,
+        3
+      );
+    }
+
+    graphics.generateTexture(
+      "train-newspaper",
+      76,
+      56
+    );
+
+    graphics.destroy();
+  }
+
+  private createBrokenDoorTexture() {
+    if (
+      this.textures.exists(
+        "broken-train-door"
+      )
+    ) {
+      this.textures.remove(
+        "broken-train-door"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0xdc2626);
+    graphics.fillRoundedRect(
+      4,
+      2,
+      72,
+      116,
+      6
+    );
+
+    graphics.lineStyle(
+      5,
+      0x7f1d1d
+    );
+
+    graphics.strokeRoundedRect(
+      4,
+      2,
+      72,
+      116,
+      6
+    );
+
+    graphics.fillStyle(0xbfe8ff);
+    graphics.fillRoundedRect(
+      15,
+      12,
+      50,
+      42,
+      4
+    );
+
+    graphics.lineStyle(
+      4,
+      0xffffff
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(40, 58);
+    graphics.lineTo(40, 108);
+    graphics.strokePath();
+
+    graphics.fillStyle(0xfacc15);
+    graphics.fillTriangle(
+      16,
+      70,
+      30,
+      96,
+      2,
+      96
+    );
+
+    graphics.fillStyle(0x111827);
+    graphics.fillRect(
+      14,
+      82,
+      4,
+      8
+    );
+
+    graphics.fillCircle(
+      16,
+      94,
+      2
+    );
+
+    graphics.generateTexture(
+      "broken-train-door",
+      80,
+      120
+    );
+
+    graphics.destroy();
+  }
+}
+
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: 960,
@@ -8091,6 +10021,7 @@ const config: Phaser.Types.Core.GameConfig = {
     MetroScene,
     SchoolScene,
     BunScene,
+    TrainHomeScene,
   ],
 };
 
