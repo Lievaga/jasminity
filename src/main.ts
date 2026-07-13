@@ -21,6 +21,8 @@ class GameScene extends Phaser.Scene {
   private enterKey!: Phaser.Input.Keyboard.Key;
 
   private platforms!: Phaser.Physics.Arcade.StaticGroup;
+  private obstacles!: Phaser.Physics.Arcade.StaticGroup;
+
   private alarmClock!: Phaser.Physics.Arcade.Image;
   private coffee!: Phaser.Physics.Arcade.Image;
   private toilet!: Phaser.Physics.Arcade.Image;
@@ -43,6 +45,8 @@ class GameScene extends Phaser.Scene {
   private alarmDisabled = false;
   private coffeeCollected = false;
   private toiletWarningActive = false;
+
+  private triggeredObstacles = new Set<string>();
 
   private readonly gameHeight = 540;
   private readonly worldWidth = 3200;
@@ -79,11 +83,17 @@ class GameScene extends Phaser.Scene {
     this.coffeeCollected = false;
     this.toiletWarningActive = false;
 
+    this.triggeredObstacles.clear();
+
     this.createPlayerTexture();
     this.createPlatformTexture();
     this.createAlarmClockTexture();
     this.createCoffeeTexture();
     this.createToiletTexture();
+
+    this.createSlipperTexture();
+    this.createLaundryBasketTexture();
+    this.createStoolTexture();
 
     this.createBackground();
     this.createApartmentDecorations();
@@ -91,6 +101,7 @@ class GameScene extends Phaser.Scene {
     this.createPlayer();
     this.createAlarmClock();
     this.createCoffee();
+    this.createObstacles();
     this.createToilet();
     this.createControls();
     this.createHud();
@@ -172,7 +183,7 @@ class GameScene extends Phaser.Scene {
       .text(
         480,
         285,
-        "Turn off the alarm, drink coffee and reach the toilet.",
+        "Turn off the alarm, drink coffee and avoid the mess.",
         {
           fontFamily: "Arial",
           fontSize: "18px",
@@ -707,6 +718,166 @@ class GameScene extends Phaser.Scene {
         fontStyle: "bold",
       })
       .setOrigin(0.5);
+  }
+
+  private createObstacles() {
+    this.obstacles = this.physics.add.staticGroup();
+
+    const slipper = this.obstacles
+      .create(1260, 460, "slipper")
+      .setDepth(4);
+
+    slipper.setData("obstacleId", "slipper");
+    slipper.setData("message", "Who left that slipper there?!");
+
+    const laundryBasket = this.obstacles
+      .create(1990, 438, "laundry-basket")
+      .setDepth(4);
+
+    laundryBasket.setData(
+      "obstacleId",
+      "laundry-basket"
+    );
+
+    laundryBasket.setData(
+      "message",
+      "Laundry attacks again!"
+    );
+
+    const stool = this.obstacles
+      .create(2500, 442, "stool")
+      .setDepth(4);
+
+    stool.setData("obstacleId", "stool");
+    stool.setData("message", "The stool chose violence.");
+
+    this.physics.add.overlap(
+      this.player,
+      this.obstacles,
+      this.hitObstacle,
+      undefined,
+      this
+    );
+
+    this.add
+      .text(1260, 415, "SLIPPER", {
+        fontFamily: "Arial",
+        fontSize: "15px",
+        color: "#7c2d12",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(1990, 370, "LAUNDRY", {
+        fontFamily: "Arial",
+        fontSize: "15px",
+        color: "#7c2d12",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(2500, 370, "STOOL", {
+        fontFamily: "Arial",
+        fontSize: "15px",
+        color: "#7c2d12",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+  }
+
+  private hitObstacle(
+    _playerObject: ArcadeCollisionObject,
+    obstacleObject: ArcadeCollisionObject
+  ) {
+    if (
+      !this.gameStarted ||
+      this.gameOver ||
+      this.gameWon
+    ) {
+      return;
+    }
+
+    const obstacle =
+      obstacleObject as Phaser.Physics.Arcade.Image;
+
+    const obstacleId =
+      obstacle.getData("obstacleId") as string;
+
+    const message =
+      obstacle.getData("message") as string;
+
+    if (this.triggeredObstacles.has(obstacleId)) {
+      return;
+    }
+
+    this.triggeredObstacles.add(obstacleId);
+
+    obstacle.disableBody(false, false);
+    obstacle.setAlpha(0.45);
+
+    this.urgency = Math.min(
+      this.urgencyMax,
+      this.urgency + 5
+    );
+
+    this.updateUrgencyDisplay();
+
+    this.player.setVelocityX(-300);
+    this.player.setVelocityY(-170);
+
+    this.cameras.main.shake(220, 0.008);
+    this.cameras.main.flash(120, 255, 80, 80);
+
+    const hitText = this.add
+      .text(480, 155, message, {
+        fontFamily: "Arial",
+        fontSize: "27px",
+        color: "#ffffff",
+        backgroundColor: "#b91c1c",
+        fontStyle: "bold",
+        padding: {
+          x: 18,
+          y: 10,
+        },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    const penaltyText = this.add
+      .text(480, 210, "+5% TOILET URGENCY", {
+        fontFamily: "Arial",
+        fontSize: "21px",
+        color: "#7f1d1d",
+        backgroundColor: "#fecaca",
+        fontStyle: "bold",
+        padding: {
+          x: 14,
+          y: 8,
+        },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    this.tweens.add({
+      targets: obstacle,
+      angle: 20,
+      duration: 100,
+      yoyo: true,
+      repeat: 2,
+    });
+
+    this.time.delayedCall(1400, () => {
+      hitText.destroy();
+      penaltyText.destroy();
+    });
+
+    if (this.urgency >= this.urgencyMax) {
+      this.showGameOver();
+    }
   }
 
   private createToilet() {
@@ -1251,6 +1422,10 @@ class GameScene extends Phaser.Scene {
   }
 
   private showGameOver() {
+    if (this.gameOver || this.gameWon) {
+      return;
+    }
+
     this.gameOver = true;
 
     this.objectiveText.setText(
@@ -1432,6 +1607,7 @@ class GameScene extends Phaser.Scene {
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0xffffff);
+
     graphics.fillRoundedRect(
       3,
       8,
@@ -1513,6 +1689,128 @@ class GameScene extends Phaser.Scene {
     graphics.generateTexture(
       "toilet",
       52,
+      72
+    );
+
+    graphics.destroy();
+  }
+
+  private createSlipperTexture() {
+    const graphics = this.add.graphics();
+
+    graphics.fillStyle(0xf472b6);
+
+    graphics.fillRoundedRect(
+      2,
+      12,
+      62,
+      22,
+      11
+    );
+
+    graphics.fillStyle(0xbe185d);
+
+    graphics.fillRoundedRect(
+      28,
+      6,
+      27,
+      20,
+      9
+    );
+
+    graphics.lineStyle(3, 0x831843);
+
+    graphics.strokeRoundedRect(
+      2,
+      12,
+      62,
+      22,
+      11
+    );
+
+    graphics.generateTexture(
+      "slipper",
+      68,
+      40
+    );
+
+    graphics.destroy();
+  }
+
+  private createLaundryBasketTexture() {
+    const graphics = this.add.graphics();
+
+    graphics.fillStyle(0xf8fafc);
+
+    graphics.fillRoundedRect(
+      4,
+      8,
+      62,
+      58,
+      8
+    );
+
+    graphics.lineStyle(4, 0x64748b);
+
+    graphics.strokeRoundedRect(
+      4,
+      8,
+      62,
+      58,
+      8
+    );
+
+    graphics.fillStyle(0x60a5fa);
+    graphics.fillCircle(20, 12, 12);
+
+    graphics.fillStyle(0xf472b6);
+    graphics.fillCircle(38, 10, 13);
+
+    graphics.fillStyle(0xfacc15);
+    graphics.fillCircle(54, 13, 11);
+
+    graphics.fillStyle(0x94a3b8);
+
+    for (let y = 29; y <= 53; y += 12) {
+      for (let x = 18; x <= 54; x += 18) {
+        graphics.fillCircle(x, y, 4);
+      }
+    }
+
+    graphics.generateTexture(
+      "laundry-basket",
+      70,
+      70
+    );
+
+    graphics.destroy();
+  }
+
+  private createStoolTexture() {
+    const graphics = this.add.graphics();
+
+    graphics.fillStyle(0x92400e);
+
+    graphics.fillRoundedRect(
+      3,
+      3,
+      66,
+      20,
+      6
+    );
+
+    graphics.fillStyle(0x78350f);
+
+    graphics.fillRect(10, 20, 10, 48);
+    graphics.fillRect(52, 20, 10, 48);
+
+    graphics.fillStyle(0xb45309);
+
+    graphics.fillRect(18, 43, 36, 8);
+
+    graphics.generateTexture(
+      "stool",
+      72,
       72
     );
 
