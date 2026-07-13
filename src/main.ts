@@ -12193,14 +12193,28 @@ class StairsScene extends Phaser.Scene {
       return;
     }
 
-    if (
-      this.gameOver ||
-      this.levelComplete
-    ) {
+    if (this.gameOver) {
       if (
         Phaser.Input.Keyboard.JustDown(this.restartKey)
       ) {
         this.scene.restart();
+      }
+
+      return;
+    }
+
+    if (this.levelComplete) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.restartKey)
+      ) {
+        this.scene.restart();
+      }
+
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.scene.start("FinalApartmentScene");
       }
 
       return;
@@ -12909,14 +12923,45 @@ class StairsScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(51);
 
-    this.add
+    const finalButton = this.add
+      .rectangle(
+        480,
+        405,
+        370,
+        62,
+        0xf59e0b
+      )
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(51)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const finalButtonText = this.add
       .text(
         480,
         405,
-        "Victory is behind one final door.",
+        "ENTER KETTENSTOCK",
         {
           fontFamily: "Arial",
-          fontSize: "20px",
+          fontSize: "23px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(52);
+
+    this.add
+      .text(
+        480,
+        465,
+        "Click · Enter · Space     |     R replay stairs",
+        {
+          fontFamily: "Arial",
+          fontSize: "16px",
           color: "#cbd5e1",
         }
       )
@@ -12924,20 +12969,21 @@ class StairsScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(51);
 
-    this.add
-      .text(
-        480,
-        455,
-        "Press R to replay the stairs level",
-        {
-          fontFamily: "Arial",
-          fontSize: "17px",
-          color: "#ffffff",
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(51);
+    finalButton.on("pointerover", () => {
+      finalButton.setFillStyle(0xd97706);
+      finalButton.setScale(1.03);
+      finalButtonText.setScale(1.03);
+    });
+
+    finalButton.on("pointerout", () => {
+      finalButton.setFillStyle(0xf59e0b);
+      finalButton.setScale(1);
+      finalButtonText.setScale(1);
+    });
+
+    finalButton.on("pointerdown", () => {
+      this.scene.start("FinalApartmentScene");
+    });
   }
 
   private createControls() {
@@ -13740,6 +13786,1801 @@ class StairsScene extends Phaser.Scene {
   }
 }
 
+
+class FinalApartmentScene extends Phaser.Scene {
+  private player!: Phaser.Physics.Arcade.Sprite;
+  private platforms!: Phaser.Physics.Arcade.StaticGroup;
+  private coatSpot!: Phaser.Physics.Arcade.Image;
+  private toilet!: Phaser.Physics.Arcade.Image;
+
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+
+  private wasd!: {
+    left: Phaser.Input.Keyboard.Key;
+    right: Phaser.Input.Keyboard.Key;
+    up: Phaser.Input.Keyboard.Key;
+  };
+
+  private restartKey!: Phaser.Input.Keyboard.Key;
+  private enterKey!: Phaser.Input.Keyboard.Key;
+
+  private urgency = 0;
+  private urgencyMax = 100;
+  private urgencySpeed = 6.5;
+
+  private urgencyBar!: Phaser.GameObjects.Rectangle;
+  private urgencyText!: Phaser.GameObjects.Text;
+  private objectiveText!: Phaser.GameObjects.Text;
+
+  private gameStarted = false;
+  private gameOver = false;
+  private finaleStarted = false;
+  private clothesRemoved = false;
+  private toiletWarningActive = false;
+
+  private currentPlayerTexture = "jasmin-idle";
+  private walkFrame = 0;
+  private lastWalkFrameSwitch = 0;
+
+  private readonly gameHeight = 540;
+  private readonly worldWidth = 1500;
+  private readonly moveSpeed = 240;
+  private readonly jumpVelocity = -455;
+
+  constructor() {
+    super("FinalApartmentScene");
+  }
+
+  create() {
+    this.physics.world.resume();
+
+    this.cameras.main.setBackgroundColor("#fde68a");
+
+    this.physics.world.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.cameras.main.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.urgency = 0;
+    this.urgencySpeed = 6.5;
+
+    this.gameStarted = false;
+    this.gameOver = false;
+    this.finaleStarted = false;
+    this.clothesRemoved = false;
+    this.toiletWarningActive = false;
+
+    this.currentPlayerTexture = "jasmin-idle";
+    this.walkFrame = 0;
+    this.lastWalkFrameSwitch = 0;
+
+    this.createFinalTextures();
+    this.createBackground();
+    this.createLevel();
+    this.createPlayer();
+    this.createCoatSpot();
+    this.createToilet();
+    this.createControls();
+    this.createHud();
+    this.createStartScreen();
+
+    this.cameras.main.startFollow(
+      this.player,
+      true,
+      0.08,
+      0.08
+    );
+
+    this.cameras.main.setDeadzone(260, 180);
+  }
+
+  update(time: number, delta: number) {
+    if (!this.gameStarted) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.startFinalLevel();
+      }
+
+      return;
+    }
+
+    if (this.gameOver) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.restartKey)
+      ) {
+        this.scene.restart();
+      }
+
+      return;
+    }
+
+    if (this.finaleStarted) {
+      return;
+    }
+
+    this.updatePlayerMovement();
+    this.updatePlayerAppearance(time);
+    this.updateUrgency(delta);
+  }
+
+  private createStartScreen() {
+    const overlay = this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.92
+      )
+      .setScrollFactor(0)
+      .setDepth(100);
+
+    const levelText = this.add
+      .text(
+        480,
+        88,
+        "FINAL LEVEL",
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const title = this.add
+      .text(
+        480,
+        148,
+        "KETTENSTOCK APARTMENT",
+        {
+          fontFamily: "Arial",
+          fontSize: "43px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const objective = this.add
+      .text(
+        480,
+        215,
+        "OBJECTIVE: REACH THE TOILET",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const urgencyText = this.add
+      .text(
+        480,
+        265,
+        "Starting urgency: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#fca5a5",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const instruction = this.add
+      .text(
+        480,
+        310,
+        "Drop the outer clothes, then make the final jump.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const button = this.add
+      .rectangle(
+        480,
+        400,
+        320,
+        68,
+        0xf59e0b
+      )
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(101)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const buttonText = this.add
+      .text(
+        480,
+        400,
+        "FINAL SPRINT",
+        {
+          fontFamily: "Arial",
+          fontSize: "28px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(102);
+
+    const keyboardText = this.add
+      .text(
+        480,
+        465,
+        "Click · Enter · Space",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const objects = [
+      overlay,
+      levelText,
+      title,
+      objective,
+      urgencyText,
+      instruction,
+      button,
+      buttonText,
+      keyboardText,
+    ];
+
+    button.on("pointerover", () => {
+      button.setFillStyle(0xd97706);
+      button.setScale(1.03);
+      buttonText.setScale(1.03);
+    });
+
+    button.on("pointerout", () => {
+      button.setFillStyle(0xf59e0b);
+      button.setScale(1);
+      buttonText.setScale(1);
+    });
+
+    button.on("pointerdown", () => {
+      this.startFinalLevel();
+    });
+
+    this.events.once("start-final", () => {
+      objects.forEach((object) => {
+        if (object.active) {
+          object.destroy();
+        }
+      });
+    });
+  }
+
+  private startFinalLevel() {
+    if (this.gameStarted) {
+      return;
+    }
+
+    this.gameStarted = true;
+    this.events.emit("start-final");
+
+    this.cameras.main.flash(
+      250,
+      255,
+      255,
+      255
+    );
+
+    this.showMessage(
+      "THE FINAL SPRINT!",
+      "Nothing can stop Jasmin now.",
+      0xf59e0b
+    );
+  }
+
+  private createBackground() {
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        250,
+        this.worldWidth,
+        500,
+        0xfef3c7
+      )
+      .setDepth(-10);
+
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        455,
+        this.worldWidth,
+        110,
+        0xd6c6a8
+      )
+      .setDepth(-9);
+
+    for (
+      let x = 0;
+      x < this.worldWidth;
+      x += 180
+    ) {
+      this.add
+        .rectangle(
+          x + 90,
+          460,
+          3,
+          100,
+          0xb8a98d,
+          0.45
+        )
+        .setDepth(-8);
+    }
+
+    this.add
+      .text(
+        170,
+        150,
+        "KETTENSTOCK",
+        {
+          fontFamily: "Arial",
+          fontSize: "34px",
+          color: "#7c3aed",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .rectangle(
+        470,
+        350,
+        260,
+        210,
+        0xf8fafc
+      )
+      .setStrokeStyle(
+        8,
+        0x64748b
+      )
+      .setDepth(-3);
+
+    this.add
+      .text(
+        470,
+        215,
+        "ENTRANCE HALL",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#334155",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .rectangle(
+        890,
+        380,
+        250,
+        105,
+        0x38bdf8
+      )
+      .setStrokeStyle(
+        6,
+        0x0369a1
+      )
+      .setDepth(-3);
+
+    this.add
+      .text(
+        890,
+        380,
+        "SOFA — IGNORE IT",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .rectangle(
+        1260,
+        335,
+        260,
+        225,
+        0xe0f2fe
+      )
+      .setStrokeStyle(
+        8,
+        0x64748b
+      )
+      .setDepth(-3);
+
+    this.add
+      .text(
+        1260,
+        190,
+        "BATHROOM",
+        {
+          fontFamily: "Arial",
+          fontSize: "28px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private createLevel() {
+    this.platforms =
+      this.physics.add.staticGroup();
+
+    this.platforms
+      .create(
+        this.worldWidth / 2,
+        515,
+        "platform"
+      )
+      .setScale(
+        this.worldWidth / 40,
+        1
+      )
+      .refreshBody();
+
+    this.createPlatform(
+      560,
+      390,
+      3
+    );
+
+    this.createPlatform(
+      840,
+      340,
+      3
+    );
+
+    this.createPlatform(
+      1080,
+      395,
+      3
+    );
+
+    this.createPlatform(
+      1260,
+      335,
+      2
+    );
+
+    this.add
+      .text(
+        90,
+        470,
+        "HOME",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        780,
+        455,
+        "No distractions. No delays.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#475569",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        1160,
+        455,
+        "FINAL JUMP!",
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#b91c1c",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private createPlatform(
+    x: number,
+    y: number,
+    scaleX: number
+  ) {
+    this.platforms
+      .create(x, y, "platform")
+      .setScale(scaleX, 1)
+      .refreshBody();
+  }
+
+  private createPlayer() {
+    this.player = this.physics.add.sprite(
+      100,
+      426,
+      "jasmin-idle"
+    );
+
+    this.player.setCollideWorldBounds(true);
+    this.player.setBounce(0.05);
+    this.player.setDepth(6);
+
+    this.physics.add.collider(
+      this.player,
+      this.platforms
+    );
+
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    body.setSize(30, 60);
+    body.setOffset(13, 12);
+  }
+
+  private createCoatSpot() {
+    this.coatSpot =
+      this.physics.add.staticImage(
+        520,
+        438,
+        "coat-rack"
+      );
+
+    this.coatSpot.setDepth(4);
+
+    this.physics.add.overlap(
+      this.player,
+      this.coatSpot,
+      this.removeOuterClothes,
+      undefined,
+      this
+    );
+
+    this.add
+      .text(
+        520,
+        355,
+        "DROP OUTER CLOTHES",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#7c3aed",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private removeOuterClothes(
+    _playerObject: ArcadeCollisionObject,
+    coatObject: ArcadeCollisionObject
+  ) {
+    if (
+      this.clothesRemoved ||
+      this.gameOver ||
+      this.finaleStarted
+    ) {
+      return;
+    }
+
+    const coatSpot =
+      coatObject as Phaser.Physics.Arcade.Image;
+
+    this.clothesRemoved = true;
+
+    coatSpot.disableBody(
+      true,
+      true
+    );
+
+    this.objectiveText.setText(
+      "OBJECTIVE: JUMP ON THE TOILET"
+    );
+
+    this.player.setTint(
+      0xf9a8d4
+    );
+
+    const clothesPile =
+      this.add.image(
+        555,
+        465,
+        "clothes-pile"
+      );
+
+    clothesPile.setDepth(4);
+
+    this.cameras.main.flash(
+      180,
+      255,
+      200,
+      230
+    );
+
+    this.showMessage(
+      "OUTER CLOTHES OFF!",
+      "The final route is clear.",
+      0xdb2777
+    );
+  }
+
+  private createToilet() {
+    this.toilet =
+      this.physics.add.staticImage(
+        1280,
+        420,
+        "final-toilet"
+      );
+
+    this.toilet.setDepth(4);
+
+    this.physics.add.overlap(
+      this.player,
+      this.toilet,
+      this.reachToilet,
+      undefined,
+      this
+    );
+
+    this.add
+      .text(
+        1280,
+        300,
+        "THE TOILET",
+        {
+          fontFamily: "Arial",
+          fontSize: "22px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.tweens.add({
+      targets: this.toilet,
+      scaleX: 1.04,
+      scaleY: 1.04,
+      duration: 650,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.InOut",
+    });
+  }
+
+  private reachToilet() {
+    if (
+      this.gameOver ||
+      this.finaleStarted
+    ) {
+      return;
+    }
+
+    if (!this.clothesRemoved) {
+      if (this.toiletWarningActive) {
+        return;
+      }
+
+      this.toiletWarningActive = true;
+
+      this.showMessage(
+        "Too many layers!",
+        "Drop the outer clothes first.",
+        0xdc2626
+      );
+
+      this.time.delayedCall(
+        1500,
+        () => {
+          this.toiletWarningActive = false;
+        }
+      );
+
+      return;
+    }
+
+    this.startFinale();
+  }
+
+  private startFinale() {
+    this.finaleStarted = true;
+
+    this.player.setVelocity(
+      0,
+      0
+    );
+
+    this.physics.pause();
+
+    this.objectiveText.setText(
+      "MISSION COMPLETE"
+    );
+
+    this.urgency = 0;
+    this.updateUrgencyDisplay();
+
+    this.tweens.killTweensOf(
+      this.toilet
+    );
+
+    this.player.setVisible(false);
+
+    this.cameras.main.flash(
+      700,
+      255,
+      255,
+      255
+    );
+
+    this.cameras.main.shake(
+      350,
+      0.008
+    );
+
+    this.createCelebration();
+  }
+
+  private createCelebration() {
+    const overlay = this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x020617,
+        0.96
+      )
+      .setScrollFactor(0)
+      .setDepth(100);
+
+    const stars: Phaser.GameObjects.Arc[] = [];
+
+    for (
+      let index = 0;
+      index < 90;
+      index += 1
+    ) {
+      const star = this.add
+        .circle(
+          Phaser.Math.Between(
+            0,
+            960
+          ),
+          Phaser.Math.Between(
+            0,
+            540
+          ),
+          Phaser.Math.Between(
+            1,
+            3
+          ),
+          0xffffff,
+          Phaser.Math.FloatBetween(
+            0.45,
+            1
+          )
+        )
+        .setScrollFactor(0)
+        .setDepth(101);
+
+      stars.push(star);
+
+      this.tweens.add({
+        targets: star,
+        alpha: {
+          from: 0.25,
+          to: 1,
+        },
+        duration:
+          Phaser.Math.Between(
+            500,
+            1400
+          ),
+        yoyo: true,
+        repeat: -1,
+      });
+    }
+
+    const title = this.add
+      .text(
+        480,
+        95,
+        "JASMINITY COMPLETE!",
+        {
+          fontFamily: "Arial",
+          fontSize: "48px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(105);
+
+    const relief = this.add
+      .text(
+        480,
+        158,
+        "THE TOILET HAS BEEN REACHED",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(105);
+
+    const toilet = this.add
+      .image(
+        480,
+        250,
+        "final-toilet"
+      )
+      .setScale(1.5)
+      .setScrollFactor(0)
+      .setDepth(105);
+
+    this.tweens.add({
+      targets: toilet,
+      angle: {
+        from: -4,
+        to: 4,
+      },
+      scaleX: {
+        from: 1.45,
+        to: 1.6,
+      },
+      scaleY: {
+        from: 1.45,
+        to: 1.6,
+      },
+      duration: 450,
+      yoyo: true,
+      repeat: 5,
+    });
+
+    const confettiColors = [
+      0xfacc15,
+      0x22c55e,
+      0x3b82f6,
+      0xec4899,
+      0xa855f7,
+      0xf97316,
+    ];
+
+    for (
+      let index = 0;
+      index < 80;
+      index += 1
+    ) {
+      const confetti = this.add
+        .rectangle(
+          Phaser.Math.Between(
+            60,
+            900
+          ),
+          Phaser.Math.Between(
+            -220,
+            -20
+          ),
+          Phaser.Math.Between(
+            5,
+            11
+          ),
+          Phaser.Math.Between(
+            10,
+            22
+          ),
+          Phaser.Utils.Array.GetRandom(
+            confettiColors
+          )
+        )
+        .setScrollFactor(0)
+        .setDepth(106);
+
+      this.tweens.add({
+        targets: confetti,
+        y: Phaser.Math.Between(
+          560,
+          760
+        ),
+        angle:
+          Phaser.Math.Between(
+            -540,
+            540
+          ),
+        duration:
+          Phaser.Math.Between(
+            2200,
+            4200
+          ),
+        delay:
+          Phaser.Math.Between(
+            0,
+            1800
+          ),
+        repeat: 1,
+      });
+    }
+
+    const creditsText = [
+      "A LONG DAY AGO,",
+      "IN A CITY NOT SO FAR AWAY...",
+      "",
+      "JASMINITY",
+      "",
+      "Jasmin survived the alarm.",
+      "She conquered the coffee.",
+      "She caught the metro.",
+      "She faced the school.",
+      "She found the legendary bun.",
+      "She escaped the broken train.",
+      "She rode a BikeBnD community bike.",
+      "She climbed past two strollers,",
+      "a cat and one white dog.",
+      "",
+      "At last, in Kettenstock,",
+      "the final toilet was reached.",
+      "",
+      "PEACE RETURNED TO THE GALAXY.",
+      "",
+      "THE END",
+      "",
+      "Created by Agamir",
+      "Starring Jasmin",
+      "Powered by Phaser.js",
+      "Featuring BikeBnD",
+    ].join("\n");
+
+    const crawl = this.add
+      .text(
+        480,
+        710,
+        creditsText,
+        {
+          fontFamily: "Arial",
+          fontSize: "26px",
+          color: "#facc15",
+          fontStyle: "bold",
+          align: "center",
+          lineSpacing: 12,
+          wordWrap: {
+            width: 700,
+          },
+        }
+      )
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(104);
+
+    crawl.setScale(
+      1,
+      0.78
+    );
+
+    this.tweens.add({
+      targets: crawl,
+      y: -980,
+      scaleX: 0.35,
+      scaleY: 0.24,
+      alpha: {
+        from: 1,
+        to: 0.65,
+      },
+      duration: 26000,
+      ease: "Linear",
+    });
+
+    const replayButton = this.add
+      .rectangle(
+        480,
+        485,
+        290,
+        54,
+        0x7c3aed,
+        0.95
+      )
+      .setStrokeStyle(
+        3,
+        0xffffff
+      )
+      .setScrollFactor(0)
+      .setDepth(110)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const replayText = this.add
+      .text(
+        480,
+        485,
+        "PLAY AGAIN",
+        {
+          fontFamily: "Arial",
+          fontSize: "22px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(111);
+
+    replayButton.on(
+      "pointerover",
+      () => {
+        replayButton.setFillStyle(
+          0x6d28d9
+        );
+
+        replayButton.setScale(
+          1.04
+        );
+
+        replayText.setScale(
+          1.04
+        );
+      }
+    );
+
+    replayButton.on(
+      "pointerout",
+      () => {
+        replayButton.setFillStyle(
+          0x7c3aed
+        );
+
+        replayButton.setScale(
+          1
+        );
+
+        replayText.setScale(
+          1
+        );
+      }
+    );
+
+    replayButton.on(
+      "pointerdown",
+      () => {
+        this.scene.start(
+          "ApartmentScene"
+        );
+      }
+    );
+
+    this.time.delayedCall(
+      2800,
+      () => {
+        title.destroy();
+        relief.destroy();
+        toilet.destroy();
+      }
+    );
+
+    overlay.setInteractive();
+  }
+
+  private createControls() {
+    this.cursors =
+      this.input.keyboard!.createCursorKeys();
+
+    this.wasd = {
+      left: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.A
+      ),
+      right: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.D
+      ),
+      up: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.W
+      ),
+    };
+
+    this.restartKey =
+      this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.R
+      );
+
+    this.enterKey =
+      this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.ENTER
+      );
+  }
+
+  private createHud() {
+    this.add
+      .rectangle(
+        480,
+        48,
+        960,
+        96,
+        0x0f172a,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.add
+      .text(
+        20,
+        16,
+        "JASMINITY",
+        {
+          fontFamily: "Arial",
+          fontSize: "26px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.add
+      .text(
+        20,
+        61,
+        "A / D or arrows · Space / W / Up to jump",
+        {
+          fontFamily: "Arial",
+          fontSize: "14px",
+          color: "#cbd5e1",
+        }
+      )
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.objectiveText = this.add
+      .text(
+        250,
+        24,
+        "OBJECTIVE: DROP OUTER CLOTHES",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(
+        0,
+        0.5
+      )
+      .setScrollFactor(0)
+      .setDepth(22);
+
+    this.add
+      .rectangle(
+        710,
+        62,
+        310,
+        34,
+        0x111827
+      )
+      .setStrokeStyle(
+        3,
+        0xffffff
+      )
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.urgencyBar = this.add
+      .rectangle(
+        560,
+        62,
+        0,
+        24,
+        0x22c55e
+      )
+      .setOrigin(
+        0,
+        0.5
+      )
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.urgencyText = this.add
+      .text(
+        710,
+        62,
+        "TOILET URGENCY: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "16px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(22);
+
+    this.updateUrgencyDisplay();
+  }
+
+  private updatePlayerMovement() {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const movingLeft =
+      this.cursors.left.isDown ||
+      this.wasd.left.isDown;
+
+    const movingRight =
+      this.cursors.right.isDown ||
+      this.wasd.right.isDown;
+
+    if (movingLeft) {
+      this.player.setVelocityX(
+        -this.moveSpeed
+      );
+
+      this.player.setFlipX(true);
+    } else if (movingRight) {
+      this.player.setVelocityX(
+        this.moveSpeed
+      );
+
+      this.player.setFlipX(false);
+    } else {
+      this.player.setVelocityX(0);
+    }
+
+    const wantsToJump =
+      this.cursors.up.isDown ||
+      this.cursors.space.isDown ||
+      this.wasd.up.isDown;
+
+    if (
+      wantsToJump &&
+      body.blocked.down
+    ) {
+      this.player.setVelocityY(
+        this.jumpVelocity
+      );
+    }
+  }
+
+  private updatePlayerAppearance(
+    time: number
+  ) {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const isGrounded =
+      body.blocked.down ||
+      body.touching.down;
+
+    if (!isGrounded) {
+      this.setPlayerTexture(
+        "jasmin-jump"
+      );
+
+      return;
+    }
+
+    if (
+      Math.abs(
+        body.velocity.x
+      ) > 10
+    ) {
+      if (
+        time -
+          this.lastWalkFrameSwitch >
+        130
+      ) {
+        this.walkFrame =
+          this.walkFrame === 0
+            ? 1
+            : 0;
+
+        this.lastWalkFrameSwitch =
+          time;
+      }
+
+      this.setPlayerTexture(
+        this.walkFrame === 0
+          ? "jasmin-walk-1"
+          : "jasmin-walk-2"
+      );
+
+      return;
+    }
+
+    this.walkFrame = 0;
+
+    this.setPlayerTexture(
+      "jasmin-idle"
+    );
+  }
+
+  private setPlayerTexture(
+    textureKey: string
+  ) {
+    if (
+      this.currentPlayerTexture ===
+      textureKey
+    ) {
+      return;
+    }
+
+    this.currentPlayerTexture =
+      textureKey;
+
+    this.player.setTexture(
+      textureKey
+    );
+  }
+
+  private updateUrgency(
+    delta: number
+  ) {
+    this.urgency +=
+      this.urgencySpeed *
+      (delta / 1000);
+
+    if (
+      this.urgency >=
+      this.urgencyMax
+    ) {
+      this.urgency =
+        this.urgencyMax;
+
+      this.updateUrgencyDisplay();
+      this.showGameOver();
+
+      return;
+    }
+
+    this.updateUrgencyDisplay();
+  }
+
+  private updateUrgencyDisplay() {
+    const percentage =
+      this.urgency /
+      this.urgencyMax;
+
+    this.urgencyBar.width =
+      300 * percentage;
+
+    this.urgencyText.setText(
+      `TOILET URGENCY: ${Math.floor(
+        this.urgency
+      )}%`
+    );
+
+    if (percentage < 0.5) {
+      this.urgencyBar.setFillStyle(
+        0x22c55e
+      );
+    } else if (
+      percentage < 0.8
+    ) {
+      this.urgencyBar.setFillStyle(
+        0xf59e0b
+      );
+    } else {
+      this.urgencyBar.setFillStyle(
+        0xef4444
+      );
+    }
+  }
+
+  private showMessage(
+    title: string,
+    subtitle: string,
+    backgroundColor: number
+  ) {
+    const titleText = this.add
+      .text(
+        480,
+        155,
+        title,
+        {
+          fontFamily: "Arial",
+          fontSize: "27px",
+          color: "#ffffff",
+          backgroundColor:
+            `#${backgroundColor
+              .toString(16)
+              .padStart(6, "0")}`,
+          fontStyle: "bold",
+          padding: {
+            x: 18,
+            y: 10,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    const subtitleText = this.add
+      .text(
+        480,
+        210,
+        subtitle,
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#1f2937",
+          backgroundColor: "#ffffff",
+          fontStyle: "bold",
+          padding: {
+            x: 14,
+            y: 8,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    this.time.delayedCall(
+      1600,
+      () => {
+        titleText.destroy();
+        subtitleText.destroy();
+      }
+    );
+  }
+
+  private showGameOver() {
+    if (
+      this.gameOver ||
+      this.finaleStarted
+    ) {
+      return;
+    }
+
+    this.gameOver = true;
+
+    this.objectiveText.setText(
+      "OBJECTIVE FAILED"
+    );
+
+    this.player.setVelocity(
+      0,
+      0
+    );
+
+    this.physics.pause();
+
+    this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x111827,
+        0.86
+      )
+      .setScrollFactor(0)
+      .setDepth(50);
+
+    this.add
+      .text(
+        480,
+        210,
+        "SO CLOSE!",
+        {
+          fontFamily: "Arial",
+          fontSize: "58px",
+          color: "#ff6b6b",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        285,
+        "The final hallway took too long.",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        350,
+        "Press R to restart the final level",
+        {
+          fontFamily: "Arial",
+          fontSize: "22px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+  }
+
+  private createFinalTextures() {
+    this.createCoatRackTexture();
+    this.createClothesPileTexture();
+    this.createToiletTexture();
+  }
+
+  private createCoatRackTexture() {
+    if (
+      this.textures.exists(
+        "coat-rack"
+      )
+    ) {
+      this.textures.remove(
+        "coat-rack"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.lineStyle(
+      7,
+      0x78350f
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(40, 5);
+    graphics.lineTo(40, 72);
+    graphics.moveTo(18, 72);
+    graphics.lineTo(62, 72);
+    graphics.moveTo(40, 16);
+    graphics.lineTo(20, 29);
+    graphics.moveTo(40, 16);
+    graphics.lineTo(60, 29);
+    graphics.strokePath();
+
+    graphics.fillStyle(
+      0x7c3aed
+    );
+
+    graphics.fillRoundedRect(
+      15,
+      27,
+      28,
+      42,
+      7
+    );
+
+    graphics.fillStyle(
+      0x2563eb
+    );
+
+    graphics.fillRoundedRect(
+      42,
+      27,
+      25,
+      37,
+      7
+    );
+
+    graphics.generateTexture(
+      "coat-rack",
+      80,
+      80
+    );
+
+    graphics.destroy();
+  }
+
+  private createClothesPileTexture() {
+    if (
+      this.textures.exists(
+        "clothes-pile"
+      )
+    ) {
+      this.textures.remove(
+        "clothes-pile"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(
+      0x7c3aed
+    );
+
+    graphics.fillEllipse(
+      35,
+      24,
+      58,
+      25
+    );
+
+    graphics.fillStyle(
+      0x2563eb
+    );
+
+    graphics.fillEllipse(
+      50,
+      18,
+      44,
+      20
+    );
+
+    graphics.fillStyle(
+      0xec4899
+    );
+
+    graphics.fillEllipse(
+      22,
+      15,
+      34,
+      18
+    );
+
+    graphics.generateTexture(
+      "clothes-pile",
+      76,
+      42
+    );
+
+    graphics.destroy();
+  }
+
+  private createToiletTexture() {
+    if (
+      this.textures.exists(
+        "final-toilet"
+      )
+    ) {
+      this.textures.remove(
+        "final-toilet"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(
+      0xffffff
+    );
+
+    graphics.fillRoundedRect(
+      18,
+      2,
+      56,
+      46,
+      8
+    );
+
+    graphics.lineStyle(
+      4,
+      0x94a3b8
+    );
+
+    graphics.strokeRoundedRect(
+      18,
+      2,
+      56,
+      46,
+      8
+    );
+
+    graphics.fillStyle(
+      0xe0f2fe
+    );
+
+    graphics.fillEllipse(
+      44,
+      55,
+      70,
+      36
+    );
+
+    graphics.lineStyle(
+      5,
+      0x94a3b8
+    );
+
+    graphics.strokeEllipse(
+      44,
+      55,
+      70,
+      36
+    );
+
+    graphics.fillStyle(
+      0xffffff
+    );
+
+    graphics.fillRoundedRect(
+      22,
+      61,
+      45,
+      28,
+      10
+    );
+
+    graphics.fillRoundedRect(
+      30,
+      82,
+      28,
+      20,
+      6
+    );
+
+    graphics.fillStyle(
+      0x22c55e
+    );
+
+    graphics.fillCircle(
+      62,
+      18,
+      5
+    );
+
+    graphics.generateTexture(
+      "final-toilet",
+      90,
+      106
+    );
+
+    graphics.destroy();
+  }
+}
+
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: 960,
@@ -13768,6 +15609,7 @@ const config: Phaser.Types.Core.GameConfig = {
     TrainHomeScene,
     BicycleScene,
     StairsScene,
+    FinalApartmentScene,
   ],
 };
 
