@@ -7,6 +7,8 @@ type ArcadeCollisionObject =
   | Phaser.Physics.Arcade.StaticBody
   | Phaser.Tilemaps.Tile;
 
+type JasminPose = "idle" | "walk1" | "walk2" | "jump";
+
 class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -35,6 +37,10 @@ class GameScene extends Phaser.Scene {
   private coffeeMoveSpeed = 360;
   private currentMoveSpeed = 220;
 
+  private normalJumpVelocity = -430;
+  private coffeeJumpVelocity = -540;
+  private currentJumpVelocity = -430;
+
   private urgencyBar!: Phaser.GameObjects.Rectangle;
   private urgencyText!: Phaser.GameObjects.Text;
   private objectiveText!: Phaser.GameObjects.Text;
@@ -47,6 +53,10 @@ class GameScene extends Phaser.Scene {
   private toiletWarningActive = false;
 
   private triggeredObstacles = new Set<string>();
+
+  private currentPlayerTexture = "jasmin-idle";
+  private walkFrame = 0;
+  private lastWalkFrameSwitch = 0;
 
   private readonly gameHeight = 540;
   private readonly worldWidth = 3200;
@@ -75,6 +85,7 @@ class GameScene extends Phaser.Scene {
     this.urgency = 0;
     this.urgencySpeed = 4;
     this.currentMoveSpeed = this.normalMoveSpeed;
+    this.currentJumpVelocity = this.normalJumpVelocity;
 
     this.gameStarted = false;
     this.gameOver = false;
@@ -85,7 +96,11 @@ class GameScene extends Phaser.Scene {
 
     this.triggeredObstacles.clear();
 
-    this.createPlayerTexture();
+    this.currentPlayerTexture = "jasmin-idle";
+    this.walkFrame = 0;
+    this.lastWalkFrameSwitch = 0;
+
+    this.createPlayerTextures();
     this.createPlatformTexture();
     this.createAlarmClockTexture();
     this.createCoffeeTexture();
@@ -117,7 +132,7 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.setDeadzone(260, 180);
   }
 
-  update(_time: number, delta: number) {
+  update(time: number, delta: number) {
     if (!this.gameStarted) {
       if (
         Phaser.Input.Keyboard.JustDown(this.enterKey) ||
@@ -138,6 +153,7 @@ class GameScene extends Phaser.Scene {
     }
 
     this.updatePlayerMovement();
+    this.updatePlayerAppearance(time);
     this.updateUrgency(delta);
   }
 
@@ -576,8 +592,8 @@ class GameScene extends Phaser.Scene {
   private createPlayer() {
     this.player = this.physics.add.sprite(
       100,
-      440,
-      "jasmin"
+      426,
+      "jasmin-idle"
     );
 
     this.player.setCollideWorldBounds(true);
@@ -588,6 +604,12 @@ class GameScene extends Phaser.Scene {
       this.player,
       this.platforms
     );
+
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    body.setSize(30, 60);
+    body.setOffset(13, 12);
   }
 
   private createAlarmClock() {
@@ -728,7 +750,10 @@ class GameScene extends Phaser.Scene {
       .setDepth(4);
 
     slipper.setData("obstacleId", "slipper");
-    slipper.setData("message", "Who left that slipper there?!");
+    slipper.setData(
+      "message",
+      "Who left that slipper there?!"
+    );
 
     const laundryBasket = this.obstacles
       .create(1990, 438, "laundry-basket")
@@ -749,7 +774,10 @@ class GameScene extends Phaser.Scene {
       .setDepth(4);
 
     stool.setData("obstacleId", "stool");
-    stool.setData("message", "The stool chose violence.");
+    stool.setData(
+      "message",
+      "The stool chose violence."
+    );
 
     this.physics.add.overlap(
       this.player,
@@ -915,11 +943,9 @@ class GameScene extends Phaser.Scene {
       left: this.input.keyboard!.addKey(
         Phaser.Input.Keyboard.KeyCodes.A
       ),
-
       right: this.input.keyboard!.addKey(
         Phaser.Input.Keyboard.KeyCodes.D
       ),
-
       up: this.input.keyboard!.addKey(
         Phaser.Input.Keyboard.KeyCodes.W
       ),
@@ -1017,8 +1043,52 @@ class GameScene extends Phaser.Scene {
       this.wasd.up.isDown;
 
     if (wantsToJump && body.blocked.down) {
-      this.player.setVelocityY(-430);
+      this.player.setVelocityY(
+        this.currentJumpVelocity
+      );
     }
+  }
+
+  private updatePlayerAppearance(time: number) {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const isGrounded =
+      body.blocked.down || body.touching.down;
+
+    if (!isGrounded) {
+      this.setPlayerTexture("jasmin-jump");
+      return;
+    }
+
+    if (Math.abs(body.velocity.x) > 10) {
+      if (time - this.lastWalkFrameSwitch > 140) {
+        this.walkFrame =
+          this.walkFrame === 0 ? 1 : 0;
+
+        this.lastWalkFrameSwitch = time;
+      }
+
+      this.setPlayerTexture(
+        this.walkFrame === 0
+          ? "jasmin-walk-1"
+          : "jasmin-walk-2"
+      );
+
+      return;
+    }
+
+    this.walkFrame = 0;
+    this.setPlayerTexture("jasmin-idle");
+  }
+
+  private setPlayerTexture(textureKey: string) {
+    if (this.currentPlayerTexture === textureKey) {
+      return;
+    }
+
+    this.currentPlayerTexture = textureKey;
+    this.player.setTexture(textureKey);
   }
 
   private updateUrgency(delta: number) {
@@ -1136,6 +1206,9 @@ class GameScene extends Phaser.Scene {
     this.currentMoveSpeed =
       this.coffeeMoveSpeed;
 
+    this.currentJumpVelocity =
+      this.coffeeJumpVelocity;
+
     this.urgencySpeed = 11;
 
     this.player.setTint(0xff7a00);
@@ -1161,7 +1234,7 @@ class GameScene extends Phaser.Scene {
       .text(
         480,
         205,
-        "Faster Jasmin. Faster urgency.",
+        "Faster Jasmin. Higher jumps. Faster urgency.",
         {
           fontFamily: "Arial",
           fontSize: "19px",
@@ -1186,6 +1259,9 @@ class GameScene extends Phaser.Scene {
 
       this.currentMoveSpeed =
         this.normalMoveSpeed;
+
+      this.currentJumpVelocity =
+        this.normalJumpVelocity;
 
       this.urgencySpeed = 4;
 
@@ -1490,49 +1566,346 @@ class GameScene extends Phaser.Scene {
       .setDepth(51);
   }
 
-  private createPlayerTexture() {
-    const graphics = this.add.graphics();
-
-    graphics.fillStyle(0xff69b4);
-    graphics.fillRoundedRect(
-      0,
-      0,
-      40,
-      60,
-      8
+  private createPlayerTextures() {
+    this.createSinglePlayerTexture(
+      "jasmin-idle",
+      "idle"
     );
 
+    this.createSinglePlayerTexture(
+      "jasmin-walk-1",
+      "walk1"
+    );
+
+    this.createSinglePlayerTexture(
+      "jasmin-walk-2",
+      "walk2"
+    );
+
+    this.createSinglePlayerTexture(
+      "jasmin-jump",
+      "jump"
+    );
+  }
+
+  private createSinglePlayerTexture(
+    textureKey: string,
+    pose: JasminPose
+  ) {
+    if (this.textures.exists(textureKey)) {
+      this.textures.remove(textureKey);
+    }
+
+    const graphics = this.add.graphics();
+
+    const skinColor = 0xf4bd94;
+    const hairColor = 0x111111;
+    const hairHighlight = 0x292524;
+    const dressColor = 0x7c3aed;
+    const dressDarkColor = 0x5b21b6;
+    const tightsColor = 0x312e81;
+    const shoeColor = 0x1f2937;
+    const bowColor = 0xc084fc;
+
+    const armLeft =
+      pose === "walk1"
+        ? { x: 10, y: 42, w: 6, h: 18 }
+        : pose === "walk2"
+          ? { x: 7, y: 34, w: 6, h: 17 }
+          : pose === "jump"
+            ? { x: 5, y: 27, w: 6, h: 18 }
+            : { x: 9, y: 38, w: 6, h: 18 };
+
+    const armRight =
+      pose === "walk1"
+        ? { x: 39, y: 34, w: 6, h: 17 }
+        : pose === "walk2"
+          ? { x: 42, y: 42, w: 6, h: 18 }
+          : pose === "jump"
+            ? { x: 44, y: 27, w: 6, h: 18 }
+            : { x: 40, y: 38, w: 6, h: 18 };
+
+    const legLeft =
+      pose === "walk1"
+        ? { x: 20, y: 61, w: 7, h: 15 }
+        : pose === "walk2"
+          ? { x: 16, y: 57, w: 7, h: 19 }
+          : pose === "jump"
+            ? { x: 18, y: 59, w: 7, h: 12 }
+            : { x: 19, y: 60, w: 7, h: 16 };
+
+    const legRight =
+      pose === "walk1"
+        ? { x: 31, y: 57, w: 7, h: 19 }
+        : pose === "walk2"
+          ? { x: 35, y: 61, w: 7, h: 15 }
+          : pose === "jump"
+            ? { x: 32, y: 59, w: 7, h: 12 }
+            : { x: 31, y: 60, w: 7, h: 16 };
+
+    const braidOffset =
+      pose === "walk1"
+        ? 2
+        : pose === "walk2"
+          ? -2
+          : 0;
+
+    const leftBraidX = 10 + braidOffset;
+    const rightBraidX = 46 - braidOffset;
+
+    graphics.fillStyle(hairColor);
+
+    graphics.fillCircle(leftBraidX, 28, 6);
+    graphics.fillCircle(leftBraidX - 1, 38, 6);
+    graphics.fillCircle(leftBraidX, 48, 5);
+    graphics.fillCircle(leftBraidX - 1, 57, 5);
+
+    graphics.fillCircle(rightBraidX, 28, 6);
+    graphics.fillCircle(rightBraidX + 1, 38, 6);
+    graphics.fillCircle(rightBraidX, 48, 5);
+    graphics.fillCircle(rightBraidX + 1, 57, 5);
+
+    graphics.fillStyle(bowColor);
+
+    graphics.fillTriangle(
+      leftBraidX - 1,
+      57,
+      leftBraidX - 8,
+      53,
+      leftBraidX - 7,
+      62
+    );
+
+    graphics.fillTriangle(
+      leftBraidX + 1,
+      57,
+      leftBraidX + 8,
+      53,
+      leftBraidX + 7,
+      62
+    );
+
+    graphics.fillCircle(leftBraidX, 57, 3);
+
+    graphics.fillTriangle(
+      rightBraidX - 1,
+      57,
+      rightBraidX - 8,
+      53,
+      rightBraidX - 7,
+      62
+    );
+
+    graphics.fillTriangle(
+      rightBraidX + 1,
+      57,
+      rightBraidX + 8,
+      53,
+      rightBraidX + 7,
+      62
+    );
+
+    graphics.fillCircle(rightBraidX, 57, 3);
+
+    graphics.fillStyle(skinColor);
+
+    graphics.fillRoundedRect(
+      armLeft.x,
+      armLeft.y,
+      armLeft.w,
+      armLeft.h,
+      3
+    );
+
+    graphics.fillRoundedRect(
+      armRight.x,
+      armRight.y,
+      armRight.w,
+      armRight.h,
+      3
+    );
+
+    graphics.fillStyle(dressColor);
+    graphics.fillRoundedRect(17, 38, 22, 18, 6);
+
+    graphics.fillStyle(dressDarkColor);
+    graphics.fillTriangle(14, 53, 42, 53, 28, 67);
+
+    graphics.fillStyle(bowColor);
+    graphics.fillCircle(28, 46, 3);
+
+    graphics.fillTriangle(
+      26,
+      46,
+      20,
+      42,
+      21,
+      49
+    );
+
+    graphics.fillTriangle(
+      30,
+      46,
+      36,
+      42,
+      35,
+      49
+    );
+
+    graphics.fillStyle(tightsColor);
+
+    graphics.fillRoundedRect(
+      legLeft.x,
+      legLeft.y,
+      legLeft.w,
+      legLeft.h,
+      3
+    );
+
+    graphics.fillRoundedRect(
+      legRight.x,
+      legRight.y,
+      legRight.w,
+      legRight.h,
+      3
+    );
+
+    graphics.fillStyle(shoeColor);
+
+    graphics.fillRoundedRect(
+      legLeft.x - 2,
+      pose === "jump" ? 69 : 74,
+      11,
+      5,
+      2
+    );
+
+    graphics.fillRoundedRect(
+      legRight.x - 2,
+      pose === "jump" ? 69 : 74,
+      11,
+      5,
+      2
+    );
+
+    graphics.fillStyle(skinColor);
+    graphics.fillCircle(28, 24, 14);
+
+    graphics.fillStyle(hairColor);
+    graphics.fillRoundedRect(13, 8, 30, 13, 8);
+    graphics.fillCircle(17, 19, 7);
+    graphics.fillCircle(39, 19, 7);
+
+    graphics.fillStyle(hairHighlight);
+    graphics.fillRoundedRect(17, 10, 7, 4, 2);
+    graphics.fillRoundedRect(26, 9, 6, 4, 2);
+
     graphics.fillStyle(0xffffff);
-    graphics.fillCircle(12, 18, 5);
-    graphics.fillCircle(28, 18, 5);
+    graphics.fillEllipse(22, 24, 9, 8);
+    graphics.fillEllipse(34, 24, 9, 8);
 
-    graphics.fillStyle(0x111827);
-    graphics.fillCircle(12, 18, 2);
-    graphics.fillCircle(28, 18, 2);
+    graphics.fillStyle(0x3f2d20);
+    graphics.fillCircle(22, 24, 3);
+    graphics.fillCircle(34, 24, 3);
 
-    graphics.fillRect(13, 40, 14, 3);
+    graphics.fillStyle(0x111111);
+    graphics.fillCircle(22, 24, 1.5);
+    graphics.fillCircle(34, 24, 1.5);
+
+    graphics.fillStyle(0xffffff);
+    graphics.fillCircle(21, 23, 1);
+    graphics.fillCircle(33, 23, 1);
+
+    graphics.lineStyle(1.5, 0x111111);
+
+    graphics.beginPath();
+    graphics.moveTo(18, 20);
+    graphics.lineTo(16, 18);
+    graphics.moveTo(20, 20);
+    graphics.lineTo(19, 17);
+    graphics.strokePath();
+
+    graphics.beginPath();
+    graphics.moveTo(38, 20);
+    graphics.lineTo(40, 18);
+    graphics.moveTo(36, 20);
+    graphics.lineTo(37, 17);
+    graphics.strokePath();
+
+    graphics.lineStyle(2, 0x3f2d20);
+
+    graphics.beginPath();
+    graphics.moveTo(18, 17);
+    graphics.lineTo(24, 16);
+    graphics.strokePath();
+
+    graphics.beginPath();
+    graphics.moveTo(32, 16);
+    graphics.lineTo(38, 17);
+    graphics.strokePath();
+
+    graphics.fillStyle(0xf472b6, 0.65);
+    graphics.fillEllipse(17, 30, 6, 3);
+    graphics.fillEllipse(39, 30, 6, 3);
+
+    if (pose === "jump") {
+      graphics.fillStyle(0xb91c1c);
+      graphics.fillEllipse(28, 33, 6, 7);
+
+      graphics.fillStyle(0xffffff);
+      graphics.fillRect(25, 30, 6, 2);
+    } else if (
+      pose === "walk1" ||
+      pose === "walk2"
+    ) {
+      graphics.lineStyle(2.5, 0x9f1239);
+
+      graphics.beginPath();
+      graphics.arc(
+        28,
+        30,
+        6,
+        0.2,
+        2.9,
+        false
+      );
+      graphics.strokePath();
+
+      graphics.fillStyle(0xef4444);
+      graphics.fillEllipse(28, 34, 7, 3);
+    } else {
+      graphics.lineStyle(2.5, 0x9f1239);
+
+      graphics.beginPath();
+      graphics.arc(
+        28,
+        30,
+        5,
+        0.2,
+        2.9,
+        false
+      );
+      graphics.strokePath();
+    }
 
     graphics.generateTexture(
-      "jasmin",
-      40,
-      60
+      textureKey,
+      56,
+      80
     );
 
     graphics.destroy();
   }
 
   private createPlatformTexture() {
+    if (this.textures.exists("platform")) {
+      this.textures.remove("platform");
+    }
+
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0x4f772d);
-
-    graphics.fillRoundedRect(
-      0,
-      0,
-      40,
-      30,
-      6
-    );
+    graphics.fillRoundedRect(0, 0, 40, 30, 6);
 
     graphics.generateTexture(
       "platform",
@@ -1544,6 +1917,10 @@ class GameScene extends Phaser.Scene {
   }
 
   private createAlarmClockTexture() {
+    if (this.textures.exists("alarm-clock")) {
+      this.textures.remove("alarm-clock");
+    }
+
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0xef4444);
@@ -1604,17 +1981,14 @@ class GameScene extends Phaser.Scene {
   }
 
   private createCoffeeTexture() {
+    if (this.textures.exists("coffee")) {
+      this.textures.remove("coffee");
+    }
+
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0xffffff);
-
-    graphics.fillRoundedRect(
-      3,
-      8,
-      30,
-      27,
-      5
-    );
+    graphics.fillRoundedRect(3, 8, 30, 27, 5);
 
     graphics.lineStyle(5, 0xffffff);
     graphics.strokeCircle(34, 21, 8);
@@ -1622,11 +1996,7 @@ class GameScene extends Phaser.Scene {
     graphics.fillStyle(0x6f4e37);
     graphics.fillEllipse(18, 10, 25, 7);
 
-    graphics.lineStyle(
-      3,
-      0xf8fafc,
-      0.8
-    );
+    graphics.lineStyle(3, 0xf8fafc, 0.8);
 
     graphics.beginPath();
 
@@ -1648,27 +2018,17 @@ class GameScene extends Phaser.Scene {
   }
 
   private createToiletTexture() {
+    if (this.textures.exists("toilet")) {
+      this.textures.remove("toilet");
+    }
+
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0xf8fafc);
-
-    graphics.fillRoundedRect(
-      7,
-      0,
-      38,
-      34,
-      7
-    );
+    graphics.fillRoundedRect(7, 0, 38, 34, 7);
 
     graphics.fillStyle(0xe2e8f0);
-
-    graphics.fillRoundedRect(
-      3,
-      28,
-      46,
-      22,
-      8
-    );
+    graphics.fillRoundedRect(3, 28, 46, 22, 8);
 
     graphics.fillStyle(0xffffff);
     graphics.fillEllipse(26, 40, 40, 20);
@@ -1677,14 +2037,7 @@ class GameScene extends Phaser.Scene {
     graphics.fillEllipse(26, 40, 25, 10);
 
     graphics.fillStyle(0xf8fafc);
-
-    graphics.fillRoundedRect(
-      16,
-      46,
-      22,
-      24,
-      5
-    );
+    graphics.fillRoundedRect(16, 46, 22, 24, 5);
 
     graphics.generateTexture(
       "toilet",
@@ -1696,37 +2049,20 @@ class GameScene extends Phaser.Scene {
   }
 
   private createSlipperTexture() {
+    if (this.textures.exists("slipper")) {
+      this.textures.remove("slipper");
+    }
+
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0xf472b6);
-
-    graphics.fillRoundedRect(
-      2,
-      12,
-      62,
-      22,
-      11
-    );
+    graphics.fillRoundedRect(2, 12, 62, 22, 11);
 
     graphics.fillStyle(0xbe185d);
-
-    graphics.fillRoundedRect(
-      28,
-      6,
-      27,
-      20,
-      9
-    );
+    graphics.fillRoundedRect(28, 6, 27, 20, 9);
 
     graphics.lineStyle(3, 0x831843);
-
-    graphics.strokeRoundedRect(
-      2,
-      12,
-      62,
-      22,
-      11
-    );
+    graphics.strokeRoundedRect(2, 12, 62, 22, 11);
 
     graphics.generateTexture(
       "slipper",
@@ -1738,27 +2074,17 @@ class GameScene extends Phaser.Scene {
   }
 
   private createLaundryBasketTexture() {
+    if (this.textures.exists("laundry-basket")) {
+      this.textures.remove("laundry-basket");
+    }
+
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0xf8fafc);
-
-    graphics.fillRoundedRect(
-      4,
-      8,
-      62,
-      58,
-      8
-    );
+    graphics.fillRoundedRect(4, 8, 62, 58, 8);
 
     graphics.lineStyle(4, 0x64748b);
-
-    graphics.strokeRoundedRect(
-      4,
-      8,
-      62,
-      58,
-      8
-    );
+    graphics.strokeRoundedRect(4, 8, 62, 58, 8);
 
     graphics.fillStyle(0x60a5fa);
     graphics.fillCircle(20, 12, 12);
@@ -1787,25 +2113,20 @@ class GameScene extends Phaser.Scene {
   }
 
   private createStoolTexture() {
+    if (this.textures.exists("stool")) {
+      this.textures.remove("stool");
+    }
+
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0x92400e);
-
-    graphics.fillRoundedRect(
-      3,
-      3,
-      66,
-      20,
-      6
-    );
+    graphics.fillRoundedRect(3, 3, 66, 20, 6);
 
     graphics.fillStyle(0x78350f);
-
     graphics.fillRect(10, 20, 10, 48);
     graphics.fillRect(52, 20, 10, 48);
 
     graphics.fillStyle(0xb45309);
-
     graphics.fillRect(18, 43, 36, 8);
 
     graphics.generateTexture(
