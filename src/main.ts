@@ -8233,14 +8233,28 @@ class TrainHomeScene extends Phaser.Scene {
       return;
     }
 
-    if (
-      this.gameOver ||
-      this.levelComplete
-    ) {
+    if (this.gameOver) {
       if (
         Phaser.Input.Keyboard.JustDown(this.restartKey)
       ) {
         this.scene.restart();
+      }
+
+      return;
+    }
+
+    if (this.levelComplete) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.restartKey)
+      ) {
+        this.scene.restart();
+      }
+
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.scene.start("BicycleScene");
       }
 
       return;
@@ -9157,14 +9171,45 @@ class TrainHomeScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(51);
 
-    this.add
+    const bicycleButton = this.add
+      .rectangle(
+        480,
+        405,
+        350,
+        62,
+        0x16a34a
+      )
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(51)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const bicycleButtonText = this.add
       .text(
         480,
         405,
-        "The bicycle ride comes next.",
+        "CONTINUE TO BICYCLE",
         {
           fontFamily: "Arial",
-          fontSize: "20px",
+          fontSize: "23px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(52);
+
+    this.add
+      .text(
+        480,
+        465,
+        "Click · Enter · Space     |     R replay train",
+        {
+          fontFamily: "Arial",
+          fontSize: "16px",
           color: "#cbd5e1",
         }
       )
@@ -9172,20 +9217,21 @@ class TrainHomeScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(51);
 
-    this.add
-      .text(
-        480,
-        455,
-        "Press R to replay the train level",
-        {
-          fontFamily: "Arial",
-          fontSize: "17px",
-          color: "#ffffff",
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(51);
+    bicycleButton.on("pointerover", () => {
+      bicycleButton.setFillStyle(0x15803d);
+      bicycleButton.setScale(1.03);
+      bicycleButtonText.setScale(1.03);
+    });
+
+    bicycleButton.on("pointerout", () => {
+      bicycleButton.setFillStyle(0x16a34a);
+      bicycleButton.setScale(1);
+      bicycleButtonText.setScale(1);
+    });
+
+    bicycleButton.on("pointerdown", () => {
+      this.scene.start("BicycleScene");
+    });
   }
 
   private createControls() {
@@ -9996,6 +10042,2002 @@ class TrainHomeScene extends Phaser.Scene {
   }
 }
 
+
+class BicycleScene extends Phaser.Scene {
+  private player!: Phaser.Physics.Arcade.Sprite;
+  private bicycle!: Phaser.Physics.Arcade.Sprite;
+  private platforms!: Phaser.Physics.Arcade.StaticGroup;
+  private roadObstacles!: Phaser.Physics.Arcade.StaticGroup;
+  private homeDoor!: Phaser.Physics.Arcade.Image;
+
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+
+  private wasd!: {
+    left: Phaser.Input.Keyboard.Key;
+    right: Phaser.Input.Keyboard.Key;
+    up: Phaser.Input.Keyboard.Key;
+  };
+
+  private restartKey!: Phaser.Input.Keyboard.Key;
+  private enterKey!: Phaser.Input.Keyboard.Key;
+
+  private urgency = 0;
+  private urgencyMax = 100;
+  private urgencySpeed = 4.4;
+
+  private urgencyBar!: Phaser.GameObjects.Rectangle;
+  private urgencyText!: Phaser.GameObjects.Text;
+  private objectiveText!: Phaser.GameObjects.Text;
+
+  private gameStarted = false;
+  private gameOver = false;
+  private levelComplete = false;
+  private bicycleCollected = false;
+  private homeWarningActive = false;
+
+  private triggeredObstacles = new Set<string>();
+
+  private currentPlayerTexture = "jasmin-idle";
+  private walkFrame = 0;
+  private lastWalkFrameSwitch = 0;
+
+  private currentMoveSpeed = 225;
+  private currentJumpVelocity = -435;
+
+  private readonly normalMoveSpeed = 225;
+  private readonly bicycleMoveSpeed = 390;
+  private readonly normalJumpVelocity = -435;
+  private readonly bicycleJumpVelocity = -500;
+
+  private readonly gameHeight = 540;
+  private readonly worldWidth = 3800;
+
+  constructor() {
+    super("BicycleScene");
+  }
+
+  create() {
+    this.physics.world.resume();
+
+    this.cameras.main.setBackgroundColor("#bfdbfe");
+
+    this.physics.world.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.cameras.main.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.urgency = 0;
+    this.urgencySpeed = 4.4;
+
+    this.currentMoveSpeed =
+      this.normalMoveSpeed;
+
+    this.currentJumpVelocity =
+      this.normalJumpVelocity;
+
+    this.gameStarted = false;
+    this.gameOver = false;
+    this.levelComplete = false;
+    this.bicycleCollected = false;
+    this.homeWarningActive = false;
+
+    this.triggeredObstacles.clear();
+
+    this.currentPlayerTexture = "jasmin-idle";
+    this.walkFrame = 0;
+    this.lastWalkFrameSwitch = 0;
+
+    this.createBicycleTextures();
+    this.createBackground();
+    this.createLevel();
+    this.createPlayer();
+    this.createBicycle();
+    this.createObstacles();
+    this.createHomeDoor();
+    this.createControls();
+    this.createHud();
+    this.createStartScreen();
+
+    this.cameras.main.startFollow(
+      this.player,
+      true,
+      0.08,
+      0.08
+    );
+
+    this.cameras.main.setDeadzone(260, 180);
+  }
+
+  update(time: number, delta: number) {
+    if (!this.gameStarted) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.startBicycleLevel();
+      }
+
+      return;
+    }
+
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.restartKey)
+      ) {
+        this.scene.restart();
+      }
+
+      return;
+    }
+
+    this.updatePlayerMovement();
+    this.updatePlayerAppearance(time);
+    this.updateBicyclePosition();
+    this.updateUrgency(delta);
+  }
+
+  private createStartScreen() {
+    const overlay = this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(100);
+
+    const levelText = this.add
+      .text(480, 90, "LEVEL 6", {
+        fontFamily: "Arial",
+        fontSize: "21px",
+        color: "#facc15",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const title = this.add
+      .text(
+        480,
+        150,
+        "BICYCLE RIDE HOME",
+        {
+          fontFamily: "Arial",
+          fontSize: "48px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const objective = this.add
+      .text(
+        480,
+        215,
+        "OBJECTIVE: FIND A BICYCLE",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const urgencyText = this.add
+      .text(
+        480,
+        265,
+        "Starting urgency: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#fca5a5",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const instruction = this.add
+      .text(
+        480,
+        310,
+        "Find the BikeBnD community bike, then race through the city.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const button = this.add
+      .rectangle(
+        480,
+        400,
+        320,
+        68,
+        0x16a34a
+      )
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(101)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const buttonText = this.add
+      .text(
+        480,
+        400,
+        "START THE RIDE",
+        {
+          fontFamily: "Arial",
+          fontSize: "27px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(102);
+
+    const keyboardText = this.add
+      .text(
+        480,
+        465,
+        "Click · Enter · Space",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const objects = [
+      overlay,
+      levelText,
+      title,
+      objective,
+      urgencyText,
+      instruction,
+      button,
+      buttonText,
+      keyboardText,
+    ];
+
+    button.on("pointerover", () => {
+      button.setFillStyle(0x15803d);
+      button.setScale(1.03);
+      buttonText.setScale(1.03);
+    });
+
+    button.on("pointerout", () => {
+      button.setFillStyle(0x16a34a);
+      button.setScale(1);
+      buttonText.setScale(1);
+    });
+
+    button.on("pointerdown", () => {
+      this.startBicycleLevel();
+    });
+
+    this.events.once("start-bicycle", () => {
+      objects.forEach((object) => {
+        if (object.active) {
+          object.destroy();
+        }
+      });
+    });
+  }
+
+  private startBicycleLevel() {
+    if (this.gameStarted) {
+      return;
+    }
+
+    this.gameStarted = true;
+    this.events.emit("start-bicycle");
+
+    this.cameras.main.flash(
+      250,
+      255,
+      255,
+      255
+    );
+
+    this.showMessage(
+      "NO TRAIN? NO PROBLEM!",
+      "Find a bicycle and keep moving.",
+      0x16a34a
+    );
+  }
+
+  private createBackground() {
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        250,
+        this.worldWidth,
+        500,
+        0xbfdbfe
+      )
+      .setDepth(-10);
+
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        455,
+        this.worldWidth,
+        110,
+        0x64748b
+      )
+      .setDepth(-9);
+
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        505,
+        this.worldWidth,
+        18,
+        0xfacc15
+      )
+      .setDepth(-8);
+
+    for (
+      let x = 0;
+      x < this.worldWidth;
+      x += 380
+    ) {
+      this.add
+        .rectangle(
+          x + 190,
+          300,
+          240,
+          250,
+          x % 760 === 0
+            ? 0xf8fafc
+            : 0xe2e8f0
+        )
+        .setStrokeStyle(
+          7,
+          0x64748b
+        )
+        .setDepth(-6);
+
+      for (
+        let windowX = -70;
+        windowX <= 70;
+        windowX += 70
+      ) {
+        this.add
+          .rectangle(
+            x + 190 + windowX,
+            265,
+            38,
+            55,
+            0x93c5fd
+          )
+          .setStrokeStyle(
+            3,
+            0x475569
+          )
+          .setDepth(-5);
+
+        this.add
+          .rectangle(
+            x + 190 + windowX,
+            350,
+            38,
+            55,
+            0x93c5fd
+          )
+          .setStrokeStyle(
+            3,
+            0x475569
+          )
+          .setDepth(-5);
+      }
+    }
+
+    this.add
+      .text(
+        170,
+        150,
+        "TRAIN BREAKDOWN",
+        {
+          fontFamily: "Arial",
+          fontSize: "30px",
+          color: "#b91c1c",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        1000,
+        150,
+        "CITY CENTER",
+        {
+          fontFamily: "Arial",
+          fontSize: "29px",
+          color: "#1e3a8a",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        2100,
+        150,
+        "BIKE LANE",
+        {
+          fontFamily: "Arial",
+          fontSize: "29px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        3150,
+        150,
+        "ALMOST HOME",
+        {
+          fontFamily: "Arial",
+          fontSize: "29px",
+          color: "#7c3aed",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        3650,
+        150,
+        "HOME",
+        {
+          fontFamily: "Arial",
+          fontSize: "32px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private createLevel() {
+    this.platforms =
+      this.physics.add.staticGroup();
+
+    this.platforms
+      .create(
+        this.worldWidth / 2,
+        515,
+        "platform"
+      )
+      .setScale(
+        this.worldWidth / 40,
+        1
+      )
+      .refreshBody();
+
+    this.createPlatform(430, 415, 3);
+    this.createPlatform(700, 350, 3);
+    this.createPlatform(980, 410, 4);
+
+    this.createPlatform(1260, 360, 3);
+    this.createPlatform(1510, 300, 3);
+    this.createPlatform(1770, 390, 3);
+
+    this.createPlatform(2030, 340, 4);
+    this.createPlatform(2310, 285, 3);
+    this.createPlatform(2580, 390, 4);
+
+    this.createPlatform(2860, 335, 3);
+    this.createPlatform(3140, 390, 3);
+    this.createPlatform(3390, 335, 3);
+
+    this.add
+      .text(
+        100,
+        470,
+        "START",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        1470,
+        455,
+        "Traffic has no sympathy.",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#475569",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        2760,
+        455,
+        "Pedal faster!",
+        {
+          fontFamily: "Arial",
+          fontSize: "19px",
+          color: "#b91c1c",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private createPlatform(
+    x: number,
+    y: number,
+    scaleX: number
+  ) {
+    this.platforms
+      .create(x, y, "platform")
+      .setScale(scaleX, 1)
+      .refreshBody();
+  }
+
+  private createPlayer() {
+    this.player = this.physics.add.sprite(
+      100,
+      426,
+      "jasmin-idle"
+    );
+
+    this.player.setCollideWorldBounds(true);
+    this.player.setBounce(0.05);
+    this.player.setDepth(6);
+
+    this.physics.add.collider(
+      this.player,
+      this.platforms
+    );
+
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    body.setSize(30, 60);
+    body.setOffset(13, 12);
+  }
+
+  private createBicycle() {
+    this.bicycle =
+      this.physics.add.sprite(
+        520,
+        449,
+        "city-bicycle"
+      );
+
+    this.bicycle.setDepth(5);
+    this.bicycle.setImmovable(true);
+
+    const bicycleBody =
+      this.bicycle.body as Phaser.Physics.Arcade.Body;
+
+    bicycleBody.setAllowGravity(false);
+
+    this.physics.add.overlap(
+      this.player,
+      this.bicycle,
+      this.collectBicycle,
+      undefined,
+      this
+    );
+
+    this.add
+      .text(
+        520,
+        370,
+        "BikeBnD COMMUNITY BIKE",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.tweens.add({
+      targets: this.bicycle,
+      y: 440,
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.InOut",
+    });
+  }
+
+  private collectBicycle(
+    _playerObject: ArcadeCollisionObject,
+    bicycleObject: ArcadeCollisionObject
+  ) {
+    if (
+      this.bicycleCollected ||
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    const bicycle =
+      bicycleObject as Phaser.Physics.Arcade.Sprite;
+
+    this.bicycleCollected = true;
+
+    this.tweens.killTweensOf(bicycle);
+
+    const collectedBicycleBody =
+      bicycle.body as Phaser.Physics.Arcade.Body;
+
+    collectedBicycleBody.enable = false;
+
+    this.currentMoveSpeed =
+      this.bicycleMoveSpeed;
+
+    this.currentJumpVelocity =
+      this.bicycleJumpVelocity;
+
+    this.urgencySpeed = 5.2;
+
+    this.objectiveText.setText(
+      "OBJECTIVE: RIDE HOME"
+    );
+
+    this.player.setScale(1.05);
+    this.player.setTint(0x86efac);
+
+    this.cameras.main.flash(
+      250,
+      120,
+      255,
+      120
+    );
+
+    this.cameras.main.shake(
+      220,
+      0.005
+    );
+
+    this.showMessage(
+      "BIKEBND BIKE FOUND!",
+      "Community bike unlocked. Faster speed and higher jumps.",
+      0x16a34a
+    );
+  }
+
+  private updateBicyclePosition() {
+    if (!this.bicycleCollected) {
+      return;
+    }
+
+    this.bicycle.setVisible(true);
+
+    const direction =
+      this.player.flipX
+        ? -1
+        : 1;
+
+    this.bicycle.setFlipX(
+      this.player.flipX
+    );
+
+    this.bicycle.setPosition(
+      this.player.x +
+        direction * 2,
+      this.player.y + 25
+    );
+  }
+
+  private createObstacles() {
+    this.roadObstacles =
+      this.physics.add.staticGroup();
+
+    const data = [
+      {
+        x: 950,
+        y: 454,
+        key: "road-cone",
+        id: "cone",
+        label: "ROAD CONE",
+        message:
+          "A cone protects absolutely nothing.",
+      },
+      {
+        x: 1370,
+        y: 449,
+        key: "road-puddle",
+        id: "puddle",
+        label: "PUDDLE",
+        message:
+          "Munich weather says hello.",
+      },
+      {
+        x: 1880,
+        y: 445,
+        key: "road-box",
+        id: "box",
+        label: "BOX",
+        message:
+          "A delivery chose the bike lane.",
+      },
+      {
+        x: 2380,
+        y: 447,
+        key: "road-dog",
+        id: "dog",
+        label: "DOG",
+        message:
+          "The dog has urgent plans too.",
+      },
+      {
+        x: 2940,
+        y: 447,
+        key: "road-scooter",
+        id: "scooter",
+        label: "SCOOTER",
+        message:
+          "A scooter lies exactly where expected.",
+      },
+    ];
+
+    data.forEach((item) => {
+      const obstacle =
+        this.roadObstacles
+          .create(
+            item.x,
+            item.y,
+            item.key
+          )
+          .setDepth(4);
+
+      obstacle.setData(
+        "obstacleId",
+        item.id
+      );
+
+      obstacle.setData(
+        "message",
+        item.message
+      );
+
+      this.add
+        .text(
+          item.x,
+          item.y - 64,
+          item.label,
+          {
+            fontFamily: "Arial",
+            fontSize: "14px",
+            color: "#7c2d12",
+            fontStyle: "bold",
+          }
+        )
+        .setOrigin(0.5);
+    });
+
+    this.physics.add.overlap(
+      this.player,
+      this.roadObstacles,
+      this.hitObstacle,
+      undefined,
+      this
+    );
+  }
+
+  private hitObstacle(
+    _playerObject: ArcadeCollisionObject,
+    obstacleObject: ArcadeCollisionObject
+  ) {
+    if (
+      !this.gameStarted ||
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    const obstacle =
+      obstacleObject as Phaser.Physics.Arcade.Image;
+
+    const obstacleId =
+      obstacle.getData("obstacleId") as string;
+
+    const message =
+      obstacle.getData("message") as string;
+
+    if (
+      this.triggeredObstacles.has(obstacleId)
+    ) {
+      return;
+    }
+
+    this.triggeredObstacles.add(obstacleId);
+
+    obstacle.disableBody(false, false);
+    obstacle.setAlpha(0.45);
+
+    this.addUrgency(
+      this.bicycleCollected
+        ? 6
+        : 4
+    );
+
+    this.player.setVelocityX(-330);
+    this.player.setVelocityY(-185);
+
+    this.cameras.main.shake(
+      230,
+      0.009
+    );
+
+    this.cameras.main.flash(
+      130,
+      255,
+      80,
+      80
+    );
+
+    this.showMessage(
+      message,
+      this.bicycleCollected
+        ? "+6% TOILET URGENCY"
+        : "+4% TOILET URGENCY",
+      0xb91c1c
+    );
+  }
+
+  private createHomeDoor() {
+    this.homeDoor =
+      this.physics.add.staticImage(
+        3650,
+        416,
+        "home-door"
+      );
+
+    this.homeDoor.setDepth(4);
+
+    this.physics.add.overlap(
+      this.player,
+      this.homeDoor,
+      this.reachHome,
+      undefined,
+      this
+    );
+
+    this.add
+      .text(
+        3650,
+        300,
+        "HOME",
+        {
+          fontFamily: "Arial",
+          fontSize: "22px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private reachHome() {
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    if (!this.bicycleCollected) {
+      if (this.homeWarningActive) {
+        return;
+      }
+
+      this.homeWarningActive = true;
+
+      this.showMessage(
+        "Too far to walk!",
+        "Go back and take the bicycle.",
+        0xdc2626
+      );
+
+      this.time.delayedCall(1500, () => {
+        this.homeWarningActive = false;
+      });
+
+      return;
+    }
+
+    this.completeLevel();
+  }
+
+  private completeLevel() {
+    this.levelComplete = true;
+
+    this.objectiveText.setText(
+      "LEVEL 6 COMPLETE"
+    );
+
+    this.player.setVelocity(0, 0);
+    this.physics.pause();
+
+    this.cameras.main.flash(
+      400,
+      255,
+      255,
+      255
+    );
+
+    this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.91
+      )
+      .setScrollFactor(0)
+      .setDepth(50);
+
+    this.add
+      .text(
+        480,
+        140,
+        "LEVEL 6 COMPLETE",
+        {
+          fontFamily: "Arial",
+          fontSize: "49px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        220,
+        "Jasmin cycled all the way home.",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        275,
+        `Urgency: ${Math.floor(
+          this.urgency
+        )}%`,
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#fca5a5",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        335,
+        "NEXT: CLIMB THE STAIRS",
+        {
+          fontFamily: "Arial",
+          fontSize: "29px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        405,
+        "Home is close. The toilet is not.",
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        455,
+        "Press R to replay the bicycle level",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+  }
+
+  private createControls() {
+    this.cursors =
+      this.input.keyboard!.createCursorKeys();
+
+    this.wasd = {
+      left: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.A
+      ),
+      right: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.D
+      ),
+      up: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.W
+      ),
+    };
+
+    this.restartKey =
+      this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.R
+      );
+
+    this.enterKey =
+      this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.ENTER
+      );
+  }
+
+  private createHud() {
+    this.add
+      .rectangle(
+        480,
+        48,
+        960,
+        96,
+        0x0f172a,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.add
+      .text(20, 16, "JASMINITY", {
+        fontFamily: "Arial",
+        fontSize: "26px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.add
+      .text(
+        20,
+        61,
+        "A / D or arrows · Space / W / Up to jump",
+        {
+          fontFamily: "Arial",
+          fontSize: "14px",
+          color: "#cbd5e1",
+        }
+      )
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.objectiveText = this.add
+      .text(
+        250,
+        24,
+        "OBJECTIVE: FIND A BICYCLE",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(22);
+
+    this.add
+      .rectangle(
+        710,
+        62,
+        310,
+        34,
+        0x111827
+      )
+      .setStrokeStyle(3, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.urgencyBar = this.add
+      .rectangle(
+        560,
+        62,
+        0,
+        24,
+        0x22c55e
+      )
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.urgencyText = this.add
+      .text(
+        710,
+        62,
+        "TOILET URGENCY: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "16px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(22);
+
+    this.updateUrgencyDisplay();
+  }
+
+  private updatePlayerMovement() {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const movingLeft =
+      this.cursors.left.isDown ||
+      this.wasd.left.isDown;
+
+    const movingRight =
+      this.cursors.right.isDown ||
+      this.wasd.right.isDown;
+
+    if (movingLeft) {
+      this.player.setVelocityX(
+        -this.currentMoveSpeed
+      );
+
+      this.player.setFlipX(true);
+    } else if (movingRight) {
+      this.player.setVelocityX(
+        this.currentMoveSpeed
+      );
+
+      this.player.setFlipX(false);
+    } else {
+      this.player.setVelocityX(0);
+    }
+
+    const wantsToJump =
+      this.cursors.up.isDown ||
+      this.cursors.space.isDown ||
+      this.wasd.up.isDown;
+
+    if (
+      wantsToJump &&
+      body.blocked.down
+    ) {
+      this.player.setVelocityY(
+        this.currentJumpVelocity
+      );
+    }
+  }
+
+  private updatePlayerAppearance(time: number) {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const isGrounded =
+      body.blocked.down ||
+      body.touching.down;
+
+    if (!isGrounded) {
+      this.setPlayerTexture(
+        "jasmin-jump"
+      );
+
+      return;
+    }
+
+    if (
+      Math.abs(body.velocity.x) > 10
+    ) {
+      if (
+        time -
+          this.lastWalkFrameSwitch >
+        110
+      ) {
+        this.walkFrame =
+          this.walkFrame === 0
+            ? 1
+            : 0;
+
+        this.lastWalkFrameSwitch =
+          time;
+      }
+
+      this.setPlayerTexture(
+        this.walkFrame === 0
+          ? "jasmin-walk-1"
+          : "jasmin-walk-2"
+      );
+
+      return;
+    }
+
+    this.walkFrame = 0;
+
+    this.setPlayerTexture(
+      "jasmin-idle"
+    );
+  }
+
+  private setPlayerTexture(
+    textureKey: string
+  ) {
+    if (
+      this.currentPlayerTexture ===
+      textureKey
+    ) {
+      return;
+    }
+
+    this.currentPlayerTexture =
+      textureKey;
+
+    this.player.setTexture(
+      textureKey
+    );
+  }
+
+  private updateUrgency(delta: number) {
+    this.urgency +=
+      this.urgencySpeed *
+      (delta / 1000);
+
+    if (
+      this.urgency >=
+      this.urgencyMax
+    ) {
+      this.urgency =
+        this.urgencyMax;
+
+      this.updateUrgencyDisplay();
+      this.showGameOver();
+
+      return;
+    }
+
+    this.updateUrgencyDisplay();
+  }
+
+  private addUrgency(amount: number) {
+    this.urgency = Math.min(
+      this.urgencyMax,
+      this.urgency + amount
+    );
+
+    this.updateUrgencyDisplay();
+
+    if (
+      this.urgency >=
+      this.urgencyMax
+    ) {
+      this.showGameOver();
+    }
+  }
+
+  private updateUrgencyDisplay() {
+    const percentage =
+      this.urgency /
+      this.urgencyMax;
+
+    this.urgencyBar.width =
+      300 * percentage;
+
+    this.urgencyText.setText(
+      `TOILET URGENCY: ${Math.floor(
+        this.urgency
+      )}%`
+    );
+
+    if (percentage < 0.5) {
+      this.urgencyBar.setFillStyle(
+        0x22c55e
+      );
+    } else if (percentage < 0.8) {
+      this.urgencyBar.setFillStyle(
+        0xf59e0b
+      );
+    } else {
+      this.urgencyBar.setFillStyle(
+        0xef4444
+      );
+    }
+  }
+
+  private showMessage(
+    title: string,
+    subtitle: string,
+    backgroundColor: number
+  ) {
+    const titleText = this.add
+      .text(
+        480,
+        155,
+        title,
+        {
+          fontFamily: "Arial",
+          fontSize: "27px",
+          color: "#ffffff",
+          backgroundColor:
+            `#${backgroundColor
+              .toString(16)
+              .padStart(6, "0")}`,
+          fontStyle: "bold",
+          padding: {
+            x: 18,
+            y: 10,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    const subtitleText = this.add
+      .text(
+        480,
+        210,
+        subtitle,
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#1f2937",
+          backgroundColor: "#ffffff",
+          fontStyle: "bold",
+          padding: {
+            x: 14,
+            y: 8,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    this.time.delayedCall(1600, () => {
+      titleText.destroy();
+      subtitleText.destroy();
+    });
+  }
+
+  private showGameOver() {
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    this.gameOver = true;
+
+    this.objectiveText.setText(
+      "OBJECTIVE FAILED"
+    );
+
+    this.player.setVelocity(0, 0);
+    this.physics.pause();
+
+    this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x111827,
+        0.84
+      )
+      .setScrollFactor(0)
+      .setDepth(50);
+
+    this.add
+      .text(
+        480,
+        210,
+        "TOO LATE!",
+        {
+          fontFamily: "Arial",
+          fontSize: "58px",
+          color: "#ff6b6b",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        285,
+        "The bicycle ride took too long.",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        350,
+        "Press R to restart the bicycle level",
+        {
+          fontFamily: "Arial",
+          fontSize: "22px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+  }
+
+  private createBicycleTextures() {
+    this.createCityBicycleTexture();
+    this.createConeTexture();
+    this.createPuddleTexture();
+    this.createBoxTexture();
+    this.createDogTexture();
+    this.createScooterTexture();
+    this.createHomeDoorTexture();
+  }
+
+  private createCityBicycleTexture() {
+    if (
+      this.textures.exists(
+        "city-bicycle"
+      )
+    ) {
+      this.textures.remove(
+        "city-bicycle"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.lineStyle(
+      5,
+      0x111827
+    );
+
+    graphics.strokeCircle(
+      18,
+      44,
+      15
+    );
+
+    graphics.strokeCircle(
+      65,
+      44,
+      15
+    );
+
+    graphics.lineStyle(
+      5,
+      0x16a34a
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(18, 44);
+    graphics.lineTo(35, 22);
+    graphics.lineTo(48, 44);
+    graphics.lineTo(18, 44);
+    graphics.lineTo(42, 44);
+    graphics.lineTo(58, 20);
+    graphics.lineTo(65, 44);
+    graphics.strokePath();
+
+    graphics.lineStyle(
+      4,
+      0x111827
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(32, 19);
+    graphics.lineTo(43, 19);
+    graphics.moveTo(56, 18);
+    graphics.lineTo(68, 13);
+    graphics.strokePath();
+
+    graphics.fillStyle(0xfacc15);
+    graphics.fillCircle(
+      42,
+      44,
+      5
+    );
+
+    graphics.generateTexture(
+      "city-bicycle",
+      84,
+      64
+    );
+
+    graphics.destroy();
+  }
+
+  private createConeTexture() {
+    if (
+      this.textures.exists(
+        "road-cone"
+      )
+    ) {
+      this.textures.remove(
+        "road-cone"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0xf97316);
+    graphics.fillTriangle(
+      28,
+      4,
+      8,
+      58,
+      48,
+      58
+    );
+
+    graphics.fillStyle(0xffffff);
+    graphics.fillRect(
+      14,
+      33,
+      28,
+      8
+    );
+
+    graphics.fillStyle(0x9a3412);
+    graphics.fillRoundedRect(
+      3,
+      55,
+      50,
+      10,
+      3
+    );
+
+    graphics.generateTexture(
+      "road-cone",
+      56,
+      68
+    );
+
+    graphics.destroy();
+  }
+
+  private createPuddleTexture() {
+    if (
+      this.textures.exists(
+        "road-puddle"
+      )
+    ) {
+      this.textures.remove(
+        "road-puddle"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(
+      0x38bdf8,
+      0.75
+    );
+
+    graphics.fillEllipse(
+      40,
+      20,
+      76,
+      30
+    );
+
+    graphics.fillCircle(
+      15,
+      14,
+      8
+    );
+
+    graphics.fillCircle(
+      64,
+      16,
+      10
+    );
+
+    graphics.generateTexture(
+      "road-puddle",
+      82,
+      42
+    );
+
+    graphics.destroy();
+  }
+
+  private createBoxTexture() {
+    if (
+      this.textures.exists(
+        "road-box"
+      )
+    ) {
+      this.textures.remove(
+        "road-box"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0xb45309);
+    graphics.fillRoundedRect(
+      5,
+      5,
+      62,
+      58,
+      5
+    );
+
+    graphics.lineStyle(
+      4,
+      0x78350f
+    );
+
+    graphics.strokeRoundedRect(
+      5,
+      5,
+      62,
+      58,
+      5
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(36, 5);
+    graphics.lineTo(36, 63);
+    graphics.moveTo(5, 25);
+    graphics.lineTo(67, 25);
+    graphics.strokePath();
+
+    graphics.fillStyle(0xfef3c7);
+    graphics.fillRect(
+      20,
+      32,
+      32,
+      13
+    );
+
+    graphics.generateTexture(
+      "road-box",
+      72,
+      68
+    );
+
+    graphics.destroy();
+  }
+
+  private createDogTexture() {
+    if (
+      this.textures.exists(
+        "road-dog"
+      )
+    ) {
+      this.textures.remove(
+        "road-dog"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0x92400e);
+    graphics.fillEllipse(
+      37,
+      36,
+      52,
+      28
+    );
+
+    graphics.fillCircle(
+      62,
+      27,
+      15
+    );
+
+    graphics.fillTriangle(
+      52,
+      16,
+      58,
+      4,
+      63,
+      18
+    );
+
+    graphics.fillTriangle(
+      66,
+      16,
+      76,
+      7,
+      73,
+      22
+    );
+
+    graphics.lineStyle(
+      6,
+      0x78350f
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(19, 45);
+    graphics.lineTo(16, 65);
+    graphics.moveTo(34, 46);
+    graphics.lineTo(32, 65);
+    graphics.moveTo(50, 45);
+    graphics.lineTo(49, 65);
+    graphics.moveTo(64, 41);
+    graphics.lineTo(67, 62);
+    graphics.strokePath();
+
+    graphics.fillStyle(0x111827);
+    graphics.fillCircle(
+      67,
+      26,
+      2
+    );
+
+    graphics.fillCircle(
+      76,
+      31,
+      3
+    );
+
+    graphics.lineStyle(
+      4,
+      0x92400e
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(12, 35);
+    graphics.lineTo(2, 24);
+    graphics.strokePath();
+
+    graphics.generateTexture(
+      "road-dog",
+      82,
+      70
+    );
+
+    graphics.destroy();
+  }
+
+  private createScooterTexture() {
+    if (
+      this.textures.exists(
+        "road-scooter"
+      )
+    ) {
+      this.textures.remove(
+        "road-scooter"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.lineStyle(
+      5,
+      0x111827
+    );
+
+    graphics.strokeCircle(
+      18,
+      55,
+      10
+    );
+
+    graphics.strokeCircle(
+      60,
+      55,
+      10
+    );
+
+    graphics.lineStyle(
+      6,
+      0x7c3aed
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(18, 48);
+    graphics.lineTo(53, 48);
+    graphics.lineTo(58, 15);
+    graphics.lineTo(70, 15);
+    graphics.strokePath();
+
+    graphics.fillStyle(0x7c3aed);
+    graphics.fillRoundedRect(
+      20,
+      42,
+      35,
+      9,
+      3
+    );
+
+    graphics.generateTexture(
+      "road-scooter",
+      80,
+      68
+    );
+
+    graphics.destroy();
+  }
+
+  private createHomeDoorTexture() {
+    if (
+      this.textures.exists(
+        "home-door"
+      )
+    ) {
+      this.textures.remove(
+        "home-door"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0x78350f);
+    graphics.fillRoundedRect(
+      4,
+      2,
+      72,
+      116,
+      6
+    );
+
+    graphics.fillStyle(0xb45309);
+    graphics.fillRoundedRect(
+      11,
+      9,
+      58,
+      102,
+      4
+    );
+
+    graphics.lineStyle(
+      4,
+      0x5b2c0a
+    );
+
+    graphics.strokeRoundedRect(
+      11,
+      9,
+      58,
+      102,
+      4
+    );
+
+    graphics.fillStyle(0xfacc15);
+    graphics.fillCircle(
+      58,
+      62,
+      5
+    );
+
+    graphics.fillStyle(0xfef3c7);
+    graphics.fillRoundedRect(
+      18,
+      18,
+      44,
+      28,
+      4
+    );
+
+    graphics.fillStyle(0x166534);
+    graphics.fillTriangle(
+      28,
+      27,
+      28,
+      38,
+      42,
+      32
+    );
+
+    graphics.fillRect(
+      41,
+      30,
+      11,
+      5
+    );
+
+    graphics.generateTexture(
+      "home-door",
+      80,
+      120
+    );
+
+    graphics.destroy();
+  }
+}
+
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: 960,
@@ -10022,6 +12064,7 @@ const config: Phaser.Types.Core.GameConfig = {
     SchoolScene,
     BunScene,
     TrainHomeScene,
+    BicycleScene,
   ],
 };
 
