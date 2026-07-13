@@ -114,6 +114,217 @@ type ArcadeCollisionObject =
 
 type JasminPose = "idle" | "walk1" | "walk2" | "jump";
 
+
+type JasminityMobileControls = {
+  left: boolean;
+  right: boolean;
+  jump: boolean;
+};
+
+const jasminityMobileControls: JasminityMobileControls = {
+  left: false,
+  right: false,
+  jump: false,
+};
+
+function resetJasminityMobileControls() {
+  jasminityMobileControls.left = false;
+  jasminityMobileControls.right = false;
+  jasminityMobileControls.jump = false;
+}
+
+function createMobileControls(
+  scene: Phaser.Scene
+) {
+  const isTouchDevice =
+    scene.sys.game.device.input.touch;
+
+  if (!isTouchDevice) {
+    return;
+  }
+
+  const buttonY = 475;
+
+  const makeButton = (
+    x: number,
+    labelText: string,
+    onDown: () => void,
+    onUp: () => void
+  ) => {
+    const button = scene.add
+      .circle(
+        x,
+        buttonY,
+        42,
+        0x0f172a,
+        0.72
+      )
+      .setStrokeStyle(
+        3,
+        0xffffff,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(200)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const label = scene.add
+      .text(
+        x,
+        buttonY,
+        labelText,
+        {
+          fontFamily: "Arial",
+          fontSize: "28px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(201);
+
+    const press = () => {
+      button.setFillStyle(
+        0x2563eb,
+        0.92
+      );
+      button.setScale(1.08);
+      label.setScale(1.08);
+      onDown();
+    };
+
+    const release = () => {
+      button.setFillStyle(
+        0x0f172a,
+        0.72
+      );
+      button.setScale(1);
+      label.setScale(1);
+      onUp();
+    };
+
+    button.on("pointerdown", press);
+    button.on("pointerup", release);
+    button.on("pointerout", release);
+    button.on("pointerupoutside", release);
+
+    return {
+      button,
+      label,
+    };
+  };
+
+  makeButton(
+    70,
+    "◀",
+    () => {
+      jasminityMobileControls.left = true;
+    },
+    () => {
+      jasminityMobileControls.left = false;
+    }
+  );
+
+  makeButton(
+    170,
+    "▶",
+    () => {
+      jasminityMobileControls.right = true;
+    },
+    () => {
+      jasminityMobileControls.right = false;
+    }
+  );
+
+  const jumpButton = scene.add
+    .circle(
+      880,
+      buttonY,
+      48,
+      0x7c3aed,
+      0.82
+    )
+    .setStrokeStyle(
+      3,
+      0xffffff,
+      0.95
+    )
+    .setScrollFactor(0)
+    .setDepth(200)
+    .setInteractive({
+      useHandCursor: true,
+    });
+
+  const jumpLabel = scene.add
+    .text(
+      880,
+      buttonY,
+      "JUMP",
+      {
+        fontFamily: "Arial",
+        fontSize: "17px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      }
+    )
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setDepth(201);
+
+  const jumpDown = () => {
+    jasminityMobileControls.jump = true;
+
+    jumpButton.setFillStyle(
+      0x6d28d9,
+      0.96
+    );
+
+    jumpButton.setScale(1.08);
+    jumpLabel.setScale(1.08);
+  };
+
+  const jumpUp = () => {
+    jasminityMobileControls.jump = false;
+
+    jumpButton.setFillStyle(
+      0x7c3aed,
+      0.82
+    );
+
+    jumpButton.setScale(1);
+    jumpLabel.setScale(1);
+  };
+
+  jumpButton.on(
+    "pointerdown",
+    jumpDown
+  );
+
+  jumpButton.on(
+    "pointerup",
+    jumpUp
+  );
+
+  jumpButton.on(
+    "pointerout",
+    jumpUp
+  );
+
+  jumpButton.on(
+    "pointerupoutside",
+    jumpUp
+  );
+
+  scene.events.once(
+    Phaser.Scenes.Events.SHUTDOWN,
+    resetJasminityMobileControls
+  );
+}
+
+
 class ApartmentScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -237,6 +448,7 @@ class ApartmentScene extends Phaser.Scene {
     this.createControls();
     this.createHud();
     createSoundToggle(this);
+    createMobileControls(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -1376,11 +1588,13 @@ class ApartmentScene extends Phaser.Scene {
 
     const movingLeft =
       this.cursors.left.isDown ||
-      this.wasd.left.isDown;
+      this.wasd.left.isDown ||
+      jasminityMobileControls.left;
 
     const movingRight =
       this.cursors.right.isDown ||
-      this.wasd.right.isDown;
+      this.wasd.right.isDown ||
+      jasminityMobileControls.right;
 
     if (movingLeft) {
       this.player.setVelocityX(
@@ -1401,12 +1615,15 @@ class ApartmentScene extends Phaser.Scene {
     const wantsToJump =
       this.cursors.up.isDown ||
       this.cursors.space.isDown ||
-      this.wasd.up.isDown;
+      this.wasd.up.isDown ||
+      jasminityMobileControls.jump;
 
     if (wantsToJump && body.blocked.down) {
       this.player.setVelocityY(
         this.currentJumpVelocity
       );
+
+      jasminityMobileControls.jump = false;
     }
   }
 
@@ -2462,6 +2679,7 @@ class MetroScene extends Phaser.Scene {
     this.createControls();
     this.createHud();
     createSoundToggle(this);
+    createMobileControls(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -3703,11 +3921,13 @@ class MetroScene extends Phaser.Scene {
 
     const movingLeft =
       this.cursors.left.isDown ||
-      this.wasd.left.isDown;
+      this.wasd.left.isDown ||
+      jasminityMobileControls.left;
 
     const movingRight =
       this.cursors.right.isDown ||
-      this.wasd.right.isDown;
+      this.wasd.right.isDown ||
+      jasminityMobileControls.right;
 
     if (movingLeft) {
       this.player.setVelocityX(
@@ -3728,7 +3948,8 @@ class MetroScene extends Phaser.Scene {
     const wantsToJump =
       this.cursors.up.isDown ||
       this.cursors.space.isDown ||
-      this.wasd.up.isDown;
+      this.wasd.up.isDown ||
+      jasminityMobileControls.jump;
 
     if (
       wantsToJump &&
@@ -3737,6 +3958,8 @@ class MetroScene extends Phaser.Scene {
       this.player.setVelocityY(
         this.jumpVelocity
       );
+
+      jasminityMobileControls.jump = false;
     }
   }
 
@@ -4289,6 +4512,7 @@ class SchoolScene extends Phaser.Scene {
     this.createControls();
     this.createHud();
     createSoundToggle(this);
+    createMobileControls(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -5526,11 +5750,13 @@ class SchoolScene extends Phaser.Scene {
 
     const movingLeft =
       this.cursors.left.isDown ||
-      this.wasd.left.isDown;
+      this.wasd.left.isDown ||
+      jasminityMobileControls.left;
 
     const movingRight =
       this.cursors.right.isDown ||
-      this.wasd.right.isDown;
+      this.wasd.right.isDown ||
+      jasminityMobileControls.right;
 
     if (movingLeft) {
       this.player.setVelocityX(
@@ -5551,7 +5777,8 @@ class SchoolScene extends Phaser.Scene {
     const wantsToJump =
       this.cursors.up.isDown ||
       this.cursors.space.isDown ||
-      this.wasd.up.isDown;
+      this.wasd.up.isDown ||
+      jasminityMobileControls.jump;
 
     if (
       wantsToJump &&
@@ -5560,6 +5787,8 @@ class SchoolScene extends Phaser.Scene {
       this.player.setVelocityY(
         this.jumpVelocity
       );
+
+      jasminityMobileControls.jump = false;
     }
   }
 
@@ -6284,6 +6513,7 @@ class BunScene extends Phaser.Scene {
     this.createControls();
     this.createHud();
     createSoundToggle(this);
+    createMobileControls(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -7541,11 +7771,13 @@ class BunScene extends Phaser.Scene {
 
     const movingLeft =
       this.cursors.left.isDown ||
-      this.wasd.left.isDown;
+      this.wasd.left.isDown ||
+      jasminityMobileControls.left;
 
     const movingRight =
       this.cursors.right.isDown ||
-      this.wasd.right.isDown;
+      this.wasd.right.isDown ||
+      jasminityMobileControls.right;
 
     if (movingLeft) {
       this.player.setVelocityX(
@@ -7566,7 +7798,8 @@ class BunScene extends Phaser.Scene {
     const wantsToJump =
       this.cursors.up.isDown ||
       this.cursors.space.isDown ||
-      this.wasd.up.isDown;
+      this.wasd.up.isDown ||
+      jasminityMobileControls.jump;
 
     if (
       wantsToJump &&
@@ -7575,6 +7808,8 @@ class BunScene extends Phaser.Scene {
       this.player.setVelocityY(
         this.currentJumpVelocity
       );
+
+      jasminityMobileControls.jump = false;
     }
   }
 
@@ -8377,6 +8612,7 @@ class TrainHomeScene extends Phaser.Scene {
     this.createControls();
     this.createHud();
     createSoundToggle(this);
+    createMobileControls(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -9537,11 +9773,13 @@ class TrainHomeScene extends Phaser.Scene {
 
     const movingLeft =
       this.cursors.left.isDown ||
-      this.wasd.left.isDown;
+      this.wasd.left.isDown ||
+      jasminityMobileControls.left;
 
     const movingRight =
       this.cursors.right.isDown ||
-      this.wasd.right.isDown;
+      this.wasd.right.isDown ||
+      jasminityMobileControls.right;
 
     if (movingLeft) {
       this.player.setVelocityX(
@@ -9562,7 +9800,8 @@ class TrainHomeScene extends Phaser.Scene {
     const wantsToJump =
       this.cursors.up.isDown ||
       this.cursors.space.isDown ||
-      this.wasd.up.isDown;
+      this.wasd.up.isDown ||
+      jasminityMobileControls.jump;
 
     if (
       wantsToJump &&
@@ -9571,6 +9810,8 @@ class TrainHomeScene extends Phaser.Scene {
       this.player.setVelocityY(
         this.jumpVelocity
       );
+
+      jasminityMobileControls.jump = false;
     }
   }
 
@@ -10331,6 +10572,7 @@ class BicycleScene extends Phaser.Scene {
     this.createControls();
     this.createHud();
     createSoundToggle(this);
+    createMobileControls(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -11485,11 +11727,13 @@ class BicycleScene extends Phaser.Scene {
 
     const movingLeft =
       this.cursors.left.isDown ||
-      this.wasd.left.isDown;
+      this.wasd.left.isDown ||
+      jasminityMobileControls.left;
 
     const movingRight =
       this.cursors.right.isDown ||
-      this.wasd.right.isDown;
+      this.wasd.right.isDown ||
+      jasminityMobileControls.right;
 
     if (movingLeft) {
       this.player.setVelocityX(
@@ -11510,7 +11754,8 @@ class BicycleScene extends Phaser.Scene {
     const wantsToJump =
       this.cursors.up.isDown ||
       this.cursors.space.isDown ||
-      this.wasd.up.isDown;
+      this.wasd.up.isDown ||
+      jasminityMobileControls.jump;
 
     if (
       wantsToJump &&
@@ -11519,6 +11764,8 @@ class BicycleScene extends Phaser.Scene {
       this.player.setVelocityY(
         this.currentJumpVelocity
       );
+
+      jasminityMobileControls.jump = false;
     }
   }
 
@@ -12369,6 +12616,7 @@ class StairsScene extends Phaser.Scene {
     this.createControls();
     this.createHud();
     createSoundToggle(this);
+    createMobileControls(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -13317,11 +13565,13 @@ class StairsScene extends Phaser.Scene {
 
     const movingLeft =
       this.cursors.left.isDown ||
-      this.wasd.left.isDown;
+      this.wasd.left.isDown ||
+      jasminityMobileControls.left;
 
     const movingRight =
       this.cursors.right.isDown ||
-      this.wasd.right.isDown;
+      this.wasd.right.isDown ||
+      jasminityMobileControls.right;
 
     if (movingLeft) {
       this.player.setVelocityX(
@@ -13342,7 +13592,8 @@ class StairsScene extends Phaser.Scene {
     const wantsToJump =
       this.cursors.up.isDown ||
       this.cursors.space.isDown ||
-      this.wasd.up.isDown;
+      this.wasd.up.isDown ||
+      jasminityMobileControls.jump;
 
     if (
       wantsToJump &&
@@ -13351,6 +13602,8 @@ class StairsScene extends Phaser.Scene {
       this.player.setVelocityY(
         this.jumpVelocity
       );
+
+      jasminityMobileControls.jump = false;
     }
   }
 
@@ -14085,6 +14338,7 @@ class FinalApartmentScene extends Phaser.Scene {
     this.createControls();
     this.createHud();
     createSoundToggle(this);
+    createMobileControls(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -15275,11 +15529,13 @@ class FinalApartmentScene extends Phaser.Scene {
 
     const movingLeft =
       this.cursors.left.isDown ||
-      this.wasd.left.isDown;
+      this.wasd.left.isDown ||
+      jasminityMobileControls.left;
 
     const movingRight =
       this.cursors.right.isDown ||
-      this.wasd.right.isDown;
+      this.wasd.right.isDown ||
+      jasminityMobileControls.right;
 
     if (movingLeft) {
       this.player.setVelocityX(
@@ -15300,7 +15556,8 @@ class FinalApartmentScene extends Phaser.Scene {
     const wantsToJump =
       this.cursors.up.isDown ||
       this.cursors.space.isDown ||
-      this.wasd.up.isDown;
+      this.wasd.up.isDown ||
+      jasminityMobileControls.jump;
 
     if (
       wantsToJump &&
@@ -15309,6 +15566,8 @@ class FinalApartmentScene extends Phaser.Scene {
       this.player.setVelocityY(
         this.jumpVelocity
       );
+
+      jasminityMobileControls.jump = false;
     }
   }
 
@@ -15808,6 +16067,13 @@ const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: 960,
   height: 540,
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter:
+      Phaser.Scale.CENTER_BOTH,
+    width: 960,
+    height: 540,
+  },
   parent: "app",
   backgroundColor: "#87ceeb",
 
@@ -15837,3 +16103,51 @@ const config: Phaser.Types.Core.GameConfig = {
 };
 
 new Phaser.Game(config);
+
+const gameCanvas =
+  document.querySelector(
+    "canvas"
+  );
+
+if (gameCanvas) {
+  gameCanvas.style.touchAction =
+    "none";
+
+  gameCanvas.addEventListener(
+    "touchmove",
+    (event) => {
+      event.preventDefault();
+    },
+    {
+      passive: false,
+    }
+  );
+
+  gameCanvas.addEventListener(
+    "gesturestart",
+    (event) => {
+      event.preventDefault();
+    }
+  );
+}
+
+document.addEventListener(
+  "touchmove",
+  (event) => {
+    const target =
+      event.target as HTMLElement | null;
+
+    if (
+      target?.closest(
+        "#game-container"
+      ) ||
+      target?.tagName === "CANVAS"
+    ) {
+      event.preventDefault();
+    }
+  },
+  {
+    passive: false,
+  }
+);
+
