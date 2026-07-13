@@ -10169,14 +10169,28 @@ class BicycleScene extends Phaser.Scene {
       return;
     }
 
-    if (
-      this.gameOver ||
-      this.levelComplete
-    ) {
+    if (this.gameOver) {
       if (
         Phaser.Input.Keyboard.JustDown(this.restartKey)
       ) {
         this.scene.restart();
+      }
+
+      return;
+    }
+
+    if (this.levelComplete) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.restartKey)
+      ) {
+        this.scene.restart();
+      }
+
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.scene.start("StairsScene");
       }
 
       return;
@@ -11091,14 +11105,45 @@ class BicycleScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(51);
 
-    this.add
+    const stairsButton = this.add
+      .rectangle(
+        480,
+        405,
+        360,
+        62,
+        0x7c3aed
+      )
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(51)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const stairsButtonText = this.add
       .text(
         480,
         405,
-        "Home is close. The toilet is not.",
+        "CONTINUE TO THE STAIRS",
         {
           fontFamily: "Arial",
-          fontSize: "20px",
+          fontSize: "22px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(52);
+
+    this.add
+      .text(
+        480,
+        465,
+        "Click · Enter · Space     |     R replay bicycle",
+        {
+          fontFamily: "Arial",
+          fontSize: "16px",
           color: "#cbd5e1",
         }
       )
@@ -11106,20 +11151,21 @@ class BicycleScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(51);
 
-    this.add
-      .text(
-        480,
-        455,
-        "Press R to replay the bicycle level",
-        {
-          fontFamily: "Arial",
-          fontSize: "17px",
-          color: "#ffffff",
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(51);
+    stairsButton.on("pointerover", () => {
+      stairsButton.setFillStyle(0x6d28d9);
+      stairsButton.setScale(1.03);
+      stairsButtonText.setScale(1.03);
+    });
+
+    stairsButton.on("pointerout", () => {
+      stairsButton.setFillStyle(0x7c3aed);
+      stairsButton.setScale(1);
+      stairsButtonText.setScale(1);
+    });
+
+    stairsButton.on("pointerdown", () => {
+      this.scene.start("StairsScene");
+    });
   }
 
   private createControls() {
@@ -12038,6 +12084,1662 @@ class BicycleScene extends Phaser.Scene {
   }
 }
 
+
+class StairsScene extends Phaser.Scene {
+  private player!: Phaser.Physics.Arcade.Sprite;
+  private platforms!: Phaser.Physics.Arcade.StaticGroup;
+  private stairObstacles!: Phaser.Physics.Arcade.StaticGroup;
+  private apartmentDoor!: Phaser.Physics.Arcade.Image;
+
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+
+  private wasd!: {
+    left: Phaser.Input.Keyboard.Key;
+    right: Phaser.Input.Keyboard.Key;
+    up: Phaser.Input.Keyboard.Key;
+  };
+
+  private restartKey!: Phaser.Input.Keyboard.Key;
+  private enterKey!: Phaser.Input.Keyboard.Key;
+
+  private urgency = 0;
+  private urgencyMax = 100;
+  private urgencySpeed = 4.6;
+
+  private urgencyBar!: Phaser.GameObjects.Rectangle;
+  private urgencyText!: Phaser.GameObjects.Text;
+  private objectiveText!: Phaser.GameObjects.Text;
+
+  private gameStarted = false;
+  private gameOver = false;
+  private levelComplete = false;
+
+  private triggeredObstacles = new Set<string>();
+
+  private currentPlayerTexture = "jasmin-idle";
+  private walkFrame = 0;
+  private lastWalkFrameSwitch = 0;
+
+  private readonly gameHeight = 540;
+  private readonly worldWidth = 2700;
+  private readonly moveSpeed = 225;
+  private readonly jumpVelocity = -445;
+
+  constructor() {
+    super("StairsScene");
+  }
+
+  create() {
+    this.physics.world.resume();
+
+    this.cameras.main.setBackgroundColor("#f5f3ff");
+
+    this.physics.world.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.cameras.main.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.urgency = 0;
+    this.urgencySpeed = 4.6;
+
+    this.gameStarted = false;
+    this.gameOver = false;
+    this.levelComplete = false;
+
+    this.triggeredObstacles.clear();
+
+    this.currentPlayerTexture = "jasmin-idle";
+    this.walkFrame = 0;
+    this.lastWalkFrameSwitch = 0;
+
+    this.createStairsTextures();
+    this.createBackground();
+    this.createLevel();
+    this.createPlayer();
+    this.createObstacles();
+    this.createApartmentDoor();
+    this.createControls();
+    this.createHud();
+    this.createStartScreen();
+
+    this.cameras.main.startFollow(
+      this.player,
+      true,
+      0.08,
+      0.08
+    );
+
+    this.cameras.main.setDeadzone(260, 180);
+  }
+
+  update(time: number, delta: number) {
+    if (!this.gameStarted) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.startStairsLevel();
+      }
+
+      return;
+    }
+
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.restartKey)
+      ) {
+        this.scene.restart();
+      }
+
+      return;
+    }
+
+    this.updatePlayerMovement();
+    this.updatePlayerAppearance(time);
+    this.updateUrgency(delta);
+  }
+
+  private createStartScreen() {
+    const overlay = this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(100);
+
+    const levelText = this.add
+      .text(480, 90, "LEVEL 7", {
+        fontFamily: "Arial",
+        fontSize: "21px",
+        color: "#facc15",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const title = this.add
+      .text(
+        480,
+        150,
+        "THE FINAL STAIRS",
+        {
+          fontFamily: "Arial",
+          fontSize: "50px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const objective = this.add
+      .text(
+        480,
+        215,
+        "OBJECTIVE: REACH THE APARTMENT",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const urgencyText = this.add
+      .text(
+        480,
+        265,
+        "Starting urgency: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#fca5a5",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const instruction = this.add
+      .text(
+        480,
+        310,
+        "Get past the strollers, cat and dog.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const button = this.add
+      .rectangle(
+        480,
+        400,
+        320,
+        68,
+        0x7c3aed
+      )
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(101)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const buttonText = this.add
+      .text(
+        480,
+        400,
+        "ENTER THE BUILDING",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(102);
+
+    const keyboardText = this.add
+      .text(
+        480,
+        465,
+        "Click · Enter · Space",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const objects = [
+      overlay,
+      levelText,
+      title,
+      objective,
+      urgencyText,
+      instruction,
+      button,
+      buttonText,
+      keyboardText,
+    ];
+
+    button.on("pointerover", () => {
+      button.setFillStyle(0x6d28d9);
+      button.setScale(1.03);
+      buttonText.setScale(1.03);
+    });
+
+    button.on("pointerout", () => {
+      button.setFillStyle(0x7c3aed);
+      button.setScale(1);
+      buttonText.setScale(1);
+    });
+
+    button.on("pointerdown", () => {
+      this.startStairsLevel();
+    });
+
+    this.events.once("start-stairs", () => {
+      objects.forEach((object) => {
+        if (object.active) {
+          object.destroy();
+        }
+      });
+    });
+  }
+
+  private startStairsLevel() {
+    if (this.gameStarted) {
+      return;
+    }
+
+    this.gameStarted = true;
+    this.events.emit("start-stairs");
+
+    this.cameras.main.flash(
+      250,
+      255,
+      255,
+      255
+    );
+
+    this.showMessage(
+      "HOME AT LAST!",
+      "Two floors and one final door.",
+      0x7c3aed
+    );
+  }
+
+  private createBackground() {
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        250,
+        this.worldWidth,
+        500,
+        0xf5f3ff
+      )
+      .setDepth(-10);
+
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        455,
+        this.worldWidth,
+        110,
+        0xd6c6a8
+      )
+      .setDepth(-9);
+
+    for (
+      let x = 0;
+      x < this.worldWidth;
+      x += 240
+    ) {
+      this.add
+        .rectangle(
+          x + 120,
+          300,
+          210,
+          270,
+          x % 480 === 0
+            ? 0xede9fe
+            : 0xf8fafc
+        )
+        .setStrokeStyle(
+          7,
+          0x64748b
+        )
+        .setDepth(-6);
+    }
+
+    this.add
+      .text(
+        180,
+        150,
+        "BUILDING ENTRANCE",
+        {
+          fontFamily: "Arial",
+          fontSize: "29px",
+          color: "#334155",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        1050,
+        150,
+        "FLOOR 1",
+        {
+          fontFamily: "Arial",
+          fontSize: "29px",
+          color: "#7c3aed",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        1850,
+        150,
+        "FLOOR 2",
+        {
+          fontFamily: "Arial",
+          fontSize: "29px",
+          color: "#7c3aed",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        2520,
+        150,
+        "APARTMENT",
+        {
+          fontFamily: "Arial",
+          fontSize: "30px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private createLevel() {
+    this.platforms =
+      this.physics.add.staticGroup();
+
+    this.platforms
+      .create(
+        this.worldWidth / 2,
+        515,
+        "platform"
+      )
+      .setScale(
+        this.worldWidth / 40,
+        1
+      )
+      .refreshBody();
+
+    const stairs = [
+      [480, 420, 2],
+      [640, 370, 2],
+      [800, 320, 2],
+      [960, 270, 2],
+
+      [1220, 390, 3],
+      [1400, 340, 2],
+      [1560, 290, 2],
+      [1720, 240, 2],
+
+      [1980, 390, 3],
+      [2160, 340, 2],
+      [2320, 290, 2],
+    ];
+
+    stairs.forEach(([x, y, scale]) => {
+      this.createPlatform(x, y, scale);
+    });
+
+    this.add
+      .text(
+        100,
+        470,
+        "ENTRANCE",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        1110,
+        455,
+        "The cat owns this floor.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#475569",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        1890,
+        455,
+        "The white dog is watching.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#475569",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        2420,
+        455,
+        "One final door!",
+        {
+          fontFamily: "Arial",
+          fontSize: "19px",
+          color: "#b91c1c",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private createPlatform(
+    x: number,
+    y: number,
+    scaleX: number
+  ) {
+    this.platforms
+      .create(x, y, "platform")
+      .setScale(scaleX, 1)
+      .refreshBody();
+  }
+
+  private createPlayer() {
+    this.player = this.physics.add.sprite(
+      100,
+      426,
+      "jasmin-idle"
+    );
+
+    this.player.setCollideWorldBounds(true);
+    this.player.setBounce(0.05);
+    this.player.setDepth(6);
+
+    this.physics.add.collider(
+      this.player,
+      this.platforms
+    );
+
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    body.setSize(30, 60);
+    body.setOffset(13, 12);
+  }
+
+  private createObstacles() {
+    this.stairObstacles =
+      this.physics.add.staticGroup();
+
+    const data = [
+      {
+        x: 300,
+        y: 448,
+        key: "stairs-stroller-purple",
+        id: "stroller-1",
+        label: "STROLLER",
+        message:
+          "One stroller blocks half the entrance.",
+      },
+      {
+        x: 430,
+        y: 448,
+        key: "stairs-stroller-blue",
+        id: "stroller-2",
+        label: "STROLLER",
+        message:
+          "The second stroller blocks the other half.",
+      },
+      {
+        x: 1110,
+        y: 452,
+        key: "stairs-cat",
+        id: "cat",
+        label: "CAT",
+        message:
+          "The cat refuses to move.",
+      },
+      {
+        x: 1900,
+        y: 446,
+        key: "stairs-white-dog",
+        id: "white-dog",
+        label: "WHITE DOG",
+        message:
+          "The white dog wants to say hello.",
+      },
+    ];
+
+    data.forEach((item) => {
+      const obstacle =
+        this.stairObstacles
+          .create(
+            item.x,
+            item.y,
+            item.key
+          )
+          .setDepth(4);
+
+      obstacle.setData(
+        "obstacleId",
+        item.id
+      );
+
+      obstacle.setData(
+        "message",
+        item.message
+      );
+
+      this.add
+        .text(
+          item.x,
+          item.y - 68,
+          item.label,
+          {
+            fontFamily: "Arial",
+            fontSize: "14px",
+            color: "#7c2d12",
+            fontStyle: "bold",
+          }
+        )
+        .setOrigin(0.5);
+    });
+
+    this.physics.add.overlap(
+      this.player,
+      this.stairObstacles,
+      this.hitObstacle,
+      undefined,
+      this
+    );
+  }
+
+  private hitObstacle(
+    _playerObject: ArcadeCollisionObject,
+    obstacleObject: ArcadeCollisionObject
+  ) {
+    if (
+      !this.gameStarted ||
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    const obstacle =
+      obstacleObject as Phaser.Physics.Arcade.Image;
+
+    const obstacleId =
+      obstacle.getData("obstacleId") as string;
+
+    const message =
+      obstacle.getData("message") as string;
+
+    if (
+      this.triggeredObstacles.has(obstacleId)
+    ) {
+      return;
+    }
+
+    this.triggeredObstacles.add(obstacleId);
+
+    obstacle.disableBody(false, false);
+    obstacle.setAlpha(0.45);
+
+    this.addUrgency(5);
+
+    this.player.setVelocityX(-300);
+    this.player.setVelocityY(-180);
+
+    this.cameras.main.shake(
+      220,
+      0.008
+    );
+
+    this.cameras.main.flash(
+      120,
+      255,
+      80,
+      80
+    );
+
+    this.showMessage(
+      message,
+      "+5% TOILET URGENCY",
+      0xb91c1c
+    );
+  }
+
+  private createApartmentDoor() {
+    this.apartmentDoor =
+      this.physics.add.staticImage(
+        2520,
+        416,
+        "apartment-door"
+      );
+
+    this.apartmentDoor.setDepth(4);
+
+    this.physics.add.overlap(
+      this.player,
+      this.apartmentDoor,
+      this.reachApartment,
+      undefined,
+      this
+    );
+
+    this.add
+      .text(
+        2520,
+        300,
+        "JASMIN'S APARTMENT",
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private reachApartment() {
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    this.completeLevel();
+  }
+
+  private completeLevel() {
+    this.levelComplete = true;
+
+    this.objectiveText.setText(
+      "LEVEL 7 COMPLETE"
+    );
+
+    this.player.setVelocity(0, 0);
+    this.physics.pause();
+
+    this.cameras.main.flash(
+      400,
+      255,
+      255,
+      255
+    );
+
+    this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.91
+      )
+      .setScrollFactor(0)
+      .setDepth(50);
+
+    this.add
+      .text(
+        480,
+        140,
+        "LEVEL 7 COMPLETE",
+        {
+          fontFamily: "Arial",
+          fontSize: "49px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        220,
+        "Jasmin reached her apartment.",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        275,
+        `Urgency: ${Math.floor(
+          this.urgency
+        )}%`,
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#fca5a5",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        335,
+        "FINAL LEVEL: THE TOILET",
+        {
+          fontFamily: "Arial",
+          fontSize: "29px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        405,
+        "Victory is behind one final door.",
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        455,
+        "Press R to replay the stairs level",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+  }
+
+  private createControls() {
+    this.cursors =
+      this.input.keyboard!.createCursorKeys();
+
+    this.wasd = {
+      left: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.A
+      ),
+      right: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.D
+      ),
+      up: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.W
+      ),
+    };
+
+    this.restartKey =
+      this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.R
+      );
+
+    this.enterKey =
+      this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.ENTER
+      );
+  }
+
+  private createHud() {
+    this.add
+      .rectangle(
+        480,
+        48,
+        960,
+        96,
+        0x0f172a,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.add
+      .text(20, 16, "JASMINITY", {
+        fontFamily: "Arial",
+        fontSize: "26px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.add
+      .text(
+        20,
+        61,
+        "A / D or arrows · Space / W / Up to jump",
+        {
+          fontFamily: "Arial",
+          fontSize: "14px",
+          color: "#cbd5e1",
+        }
+      )
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.objectiveText = this.add
+      .text(
+        250,
+        24,
+        "OBJECTIVE: REACH THE APARTMENT",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(22);
+
+    this.add
+      .rectangle(
+        710,
+        62,
+        310,
+        34,
+        0x111827
+      )
+      .setStrokeStyle(3, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.urgencyBar = this.add
+      .rectangle(
+        560,
+        62,
+        0,
+        24,
+        0x22c55e
+      )
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.urgencyText = this.add
+      .text(
+        710,
+        62,
+        "TOILET URGENCY: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "16px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(22);
+
+    this.updateUrgencyDisplay();
+  }
+
+  private updatePlayerMovement() {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const movingLeft =
+      this.cursors.left.isDown ||
+      this.wasd.left.isDown;
+
+    const movingRight =
+      this.cursors.right.isDown ||
+      this.wasd.right.isDown;
+
+    if (movingLeft) {
+      this.player.setVelocityX(
+        -this.moveSpeed
+      );
+
+      this.player.setFlipX(true);
+    } else if (movingRight) {
+      this.player.setVelocityX(
+        this.moveSpeed
+      );
+
+      this.player.setFlipX(false);
+    } else {
+      this.player.setVelocityX(0);
+    }
+
+    const wantsToJump =
+      this.cursors.up.isDown ||
+      this.cursors.space.isDown ||
+      this.wasd.up.isDown;
+
+    if (
+      wantsToJump &&
+      body.blocked.down
+    ) {
+      this.player.setVelocityY(
+        this.jumpVelocity
+      );
+    }
+  }
+
+  private updatePlayerAppearance(time: number) {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const isGrounded =
+      body.blocked.down ||
+      body.touching.down;
+
+    if (!isGrounded) {
+      this.setPlayerTexture(
+        "jasmin-jump"
+      );
+
+      return;
+    }
+
+    if (
+      Math.abs(body.velocity.x) > 10
+    ) {
+      if (
+        time -
+          this.lastWalkFrameSwitch >
+        140
+      ) {
+        this.walkFrame =
+          this.walkFrame === 0
+            ? 1
+            : 0;
+
+        this.lastWalkFrameSwitch =
+          time;
+      }
+
+      this.setPlayerTexture(
+        this.walkFrame === 0
+          ? "jasmin-walk-1"
+          : "jasmin-walk-2"
+      );
+
+      return;
+    }
+
+    this.walkFrame = 0;
+
+    this.setPlayerTexture(
+      "jasmin-idle"
+    );
+  }
+
+  private setPlayerTexture(
+    textureKey: string
+  ) {
+    if (
+      this.currentPlayerTexture ===
+      textureKey
+    ) {
+      return;
+    }
+
+    this.currentPlayerTexture =
+      textureKey;
+
+    this.player.setTexture(
+      textureKey
+    );
+  }
+
+  private updateUrgency(delta: number) {
+    this.urgency +=
+      this.urgencySpeed *
+      (delta / 1000);
+
+    if (
+      this.urgency >=
+      this.urgencyMax
+    ) {
+      this.urgency =
+        this.urgencyMax;
+
+      this.updateUrgencyDisplay();
+      this.showGameOver();
+
+      return;
+    }
+
+    this.updateUrgencyDisplay();
+  }
+
+  private addUrgency(amount: number) {
+    this.urgency = Math.min(
+      this.urgencyMax,
+      this.urgency + amount
+    );
+
+    this.updateUrgencyDisplay();
+
+    if (
+      this.urgency >=
+      this.urgencyMax
+    ) {
+      this.showGameOver();
+    }
+  }
+
+  private updateUrgencyDisplay() {
+    const percentage =
+      this.urgency /
+      this.urgencyMax;
+
+    this.urgencyBar.width =
+      300 * percentage;
+
+    this.urgencyText.setText(
+      `TOILET URGENCY: ${Math.floor(
+        this.urgency
+      )}%`
+    );
+
+    if (percentage < 0.5) {
+      this.urgencyBar.setFillStyle(
+        0x22c55e
+      );
+    } else if (percentage < 0.8) {
+      this.urgencyBar.setFillStyle(
+        0xf59e0b
+      );
+    } else {
+      this.urgencyBar.setFillStyle(
+        0xef4444
+      );
+    }
+  }
+
+  private showMessage(
+    title: string,
+    subtitle: string,
+    backgroundColor: number
+  ) {
+    const titleText = this.add
+      .text(
+        480,
+        155,
+        title,
+        {
+          fontFamily: "Arial",
+          fontSize: "27px",
+          color: "#ffffff",
+          backgroundColor:
+            `#${backgroundColor
+              .toString(16)
+              .padStart(6, "0")}`,
+          fontStyle: "bold",
+          padding: {
+            x: 18,
+            y: 10,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    const subtitleText = this.add
+      .text(
+        480,
+        210,
+        subtitle,
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#1f2937",
+          backgroundColor: "#ffffff",
+          fontStyle: "bold",
+          padding: {
+            x: 14,
+            y: 8,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    this.time.delayedCall(1600, () => {
+      titleText.destroy();
+      subtitleText.destroy();
+    });
+  }
+
+  private showGameOver() {
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    this.gameOver = true;
+
+    this.objectiveText.setText(
+      "OBJECTIVE FAILED"
+    );
+
+    this.player.setVelocity(0, 0);
+    this.physics.pause();
+
+    this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x111827,
+        0.84
+      )
+      .setScrollFactor(0)
+      .setDepth(50);
+
+    this.add
+      .text(
+        480,
+        210,
+        "TOO LATE!",
+        {
+          fontFamily: "Arial",
+          fontSize: "58px",
+          color: "#ff6b6b",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        285,
+        "The stairs were stronger than Jasmin.",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        350,
+        "Press R to restart the stairs level",
+        {
+          fontFamily: "Arial",
+          fontSize: "22px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+  }
+
+  private createStairsTextures() {
+    this.createStrollerTexture(
+      "stairs-stroller-purple",
+      0x7c3aed
+    );
+
+    this.createStrollerTexture(
+      "stairs-stroller-blue",
+      0x2563eb
+    );
+
+    this.createCatTexture();
+    this.createWhiteDogTexture();
+    this.createApartmentDoorTexture();
+  }
+
+  private createStrollerTexture(
+    textureKey: string,
+    bodyColor: number
+  ) {
+    if (
+      this.textures.exists(textureKey)
+    ) {
+      this.textures.remove(textureKey);
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(bodyColor);
+    graphics.fillRoundedRect(
+      12,
+      22,
+      54,
+      35,
+      10
+    );
+
+    graphics.fillStyle(0xc4b5fd);
+    graphics.fillTriangle(
+      16,
+      24,
+      42,
+      4,
+      59,
+      24
+    );
+
+    graphics.lineStyle(
+      5,
+      0x334155
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(58, 24);
+    graphics.lineTo(73, 7);
+    graphics.lineTo(82, 7);
+    graphics.strokePath();
+
+    graphics.fillStyle(0x111827);
+    graphics.fillCircle(
+      24,
+      64,
+      10
+    );
+
+    graphics.fillCircle(
+      59,
+      64,
+      10
+    );
+
+    graphics.fillStyle(0x94a3b8);
+    graphics.fillCircle(
+      24,
+      64,
+      4
+    );
+
+    graphics.fillCircle(
+      59,
+      64,
+      4
+    );
+
+    graphics.generateTexture(
+      textureKey,
+      88,
+      76
+    );
+
+    graphics.destroy();
+  }
+
+  private createCatTexture() {
+    if (
+      this.textures.exists(
+        "stairs-cat"
+      )
+    ) {
+      this.textures.remove(
+        "stairs-cat"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0xf59e0b);
+    graphics.fillEllipse(
+      36,
+      42,
+      52,
+      30
+    );
+
+    graphics.fillCircle(
+      62,
+      30,
+      16
+    );
+
+    graphics.fillTriangle(
+      51,
+      20,
+      55,
+      6,
+      63,
+      20
+    );
+
+    graphics.fillTriangle(
+      64,
+      19,
+      74,
+      7,
+      76,
+      24
+    );
+
+    graphics.lineStyle(
+      5,
+      0xd97706
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(14, 41);
+    graphics.lineTo(3, 30);
+    graphics.lineTo(7, 18);
+    graphics.strokePath();
+
+    graphics.lineStyle(
+      5,
+      0x92400e
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(24, 51);
+    graphics.lineTo(22, 68);
+    graphics.moveTo(48, 51);
+    graphics.lineTo(49, 68);
+    graphics.strokePath();
+
+    graphics.fillStyle(0x111827);
+    graphics.fillCircle(
+      58,
+      29,
+      2
+    );
+
+    graphics.fillCircle(
+      68,
+      29,
+      2
+    );
+
+    graphics.fillStyle(0xf472b6);
+    graphics.fillTriangle(
+      61,
+      34,
+      65,
+      34,
+      63,
+      38
+    );
+
+    graphics.generateTexture(
+      "stairs-cat",
+      82,
+      72
+    );
+
+    graphics.destroy();
+  }
+
+  private createWhiteDogTexture() {
+    if (
+      this.textures.exists(
+        "stairs-white-dog"
+      )
+    ) {
+      this.textures.remove(
+        "stairs-white-dog"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0xf8fafc);
+    graphics.fillEllipse(
+      37,
+      39,
+      54,
+      31
+    );
+
+    graphics.fillCircle(
+      64,
+      27,
+      17
+    );
+
+    graphics.fillStyle(0xe2e8f0);
+    graphics.fillTriangle(
+      53,
+      17,
+      57,
+      3,
+      64,
+      18
+    );
+
+    graphics.fillTriangle(
+      67,
+      17,
+      78,
+      6,
+      76,
+      23
+    );
+
+    graphics.lineStyle(
+      6,
+      0xcbd5e1
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(20, 49);
+    graphics.lineTo(18, 68);
+    graphics.moveTo(35, 50);
+    graphics.lineTo(34, 68);
+    graphics.moveTo(51, 49);
+    graphics.lineTo(51, 68);
+    graphics.moveTo(64, 45);
+    graphics.lineTo(67, 66);
+    graphics.strokePath();
+
+    graphics.lineStyle(
+      4,
+      0xf8fafc
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(12, 38);
+    graphics.lineTo(2, 26);
+    graphics.strokePath();
+
+    graphics.fillStyle(0x111827);
+    graphics.fillCircle(
+      61,
+      26,
+      2
+    );
+
+    graphics.fillCircle(
+      72,
+      31,
+      3
+    );
+
+    graphics.generateTexture(
+      "stairs-white-dog",
+      84,
+      72
+    );
+
+    graphics.destroy();
+  }
+
+  private createApartmentDoorTexture() {
+    if (
+      this.textures.exists(
+        "apartment-door"
+      )
+    ) {
+      this.textures.remove(
+        "apartment-door"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0x78350f);
+    graphics.fillRoundedRect(
+      4,
+      2,
+      72,
+      116,
+      6
+    );
+
+    graphics.fillStyle(0xb45309);
+    graphics.fillRoundedRect(
+      11,
+      9,
+      58,
+      102,
+      4
+    );
+
+    graphics.lineStyle(
+      4,
+      0x5b2c0a
+    );
+
+    graphics.strokeRoundedRect(
+      11,
+      9,
+      58,
+      102,
+      4
+    );
+
+    graphics.fillStyle(0xfacc15);
+    graphics.fillCircle(
+      58,
+      62,
+      5
+    );
+
+    graphics.fillStyle(0xfef3c7);
+    graphics.fillRoundedRect(
+      18,
+      18,
+      44,
+      28,
+      4
+    );
+
+    graphics.fillStyle(0x7c3aed);
+    graphics.fillCircle(
+      40,
+      32,
+      8
+    );
+
+    graphics.generateTexture(
+      "apartment-door",
+      80,
+      120
+    );
+
+    graphics.destroy();
+  }
+}
+
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: 960,
@@ -12065,6 +13767,7 @@ const config: Phaser.Types.Core.GameConfig = {
     BunScene,
     TrainHomeScene,
     BicycleScene,
+    StairsScene,
   ],
 };
 
