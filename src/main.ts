@@ -21,6 +21,7 @@ class GameScene extends Phaser.Scene {
   private enterKey!: Phaser.Input.Keyboard.Key;
 
   private platforms!: Phaser.Physics.Arcade.StaticGroup;
+  private alarmClock!: Phaser.Physics.Arcade.Image;
   private coffee!: Phaser.Physics.Arcade.Image;
   private toilet!: Phaser.Physics.Arcade.Image;
 
@@ -39,6 +40,7 @@ class GameScene extends Phaser.Scene {
   private gameOver = false;
   private gameWon = false;
   private coffeeMode = false;
+  private alarmDisabled = false;
 
   private readonly gameHeight = 540;
   private readonly worldWidth = 3200;
@@ -72,9 +74,11 @@ class GameScene extends Phaser.Scene {
     this.gameOver = false;
     this.gameWon = false;
     this.coffeeMode = false;
+    this.alarmDisabled = false;
 
     this.createPlayerTexture();
     this.createPlatformTexture();
+    this.createAlarmClockTexture();
     this.createCoffeeTexture();
     this.createToiletTexture();
 
@@ -82,6 +86,7 @@ class GameScene extends Phaser.Scene {
     this.createApartmentDecorations();
     this.createLevel();
     this.createPlayer();
+    this.createAlarmClock();
     this.createCoffee();
     this.createToilet();
     this.createControls();
@@ -151,16 +156,11 @@ class GameScene extends Phaser.Scene {
       .setDepth(101);
 
     const description = this.add
-      .text(
-        480,
-        235,
-        "Coffee first. Toilet urgently.",
-        {
-          fontFamily: "Arial",
-          fontSize: "24px",
-          color: "#cbd5e1",
-        }
-      )
+      .text(480, 235, "Coffee first. Toilet urgently.", {
+        fontFamily: "Arial",
+        fontSize: "24px",
+        color: "#cbd5e1",
+      })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(101);
@@ -169,7 +169,7 @@ class GameScene extends Phaser.Scene {
       .text(
         480,
         285,
-        "Reach the toilet before the urgency reaches 100%.",
+        "Turn off the alarm, drink coffee and reach the toilet.",
         {
           fontFamily: "Arial",
           fontSize: "18px",
@@ -225,10 +225,6 @@ class GameScene extends Phaser.Scene {
       }
 
       this.startGame();
-
-      startObjects.forEach((gameObject) => {
-        gameObject.destroy();
-      });
     };
 
     startButton.on("pointerover", () => {
@@ -261,6 +257,51 @@ class GameScene extends Phaser.Scene {
     this.events.emit("start-game");
 
     this.cameras.main.flash(250, 255, 255, 255);
+
+    const wakeUpText = this.add
+      .text(480, 155, "WAKE UP!", {
+        fontFamily: "Arial",
+        fontSize: "42px",
+        color: "#ffffff",
+        backgroundColor: "#dc2626",
+        fontStyle: "bold",
+        padding: {
+          x: 20,
+          y: 10,
+        },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(30);
+
+    const instructionText = this.add
+      .text(480, 215, "Turn off the alarm clock.", {
+        fontFamily: "Arial",
+        fontSize: "21px",
+        color: "#1f2937",
+        backgroundColor: "#ffffff",
+        padding: {
+          x: 14,
+          y: 8,
+        },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(30);
+
+    this.tweens.add({
+      targets: wakeUpText,
+      scaleX: 1.08,
+      scaleY: 1.08,
+      duration: 350,
+      yoyo: true,
+      repeat: 3,
+    });
+
+    this.time.delayedCall(2200, () => {
+      wakeUpText.destroy();
+      instructionText.destroy();
+    });
   }
 
   private createBackground() {
@@ -523,6 +564,105 @@ class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.player, this.platforms);
   }
 
+  private createAlarmClock() {
+    this.alarmClock = this.physics.add.staticImage(
+      300,
+      455,
+      "alarm-clock"
+    );
+
+    this.alarmClock.setDepth(4);
+
+    this.physics.add.overlap(
+      this.player,
+      this.alarmClock,
+      this.disableAlarmClock,
+      undefined,
+      this
+    );
+
+    this.add
+      .text(300, 395, "ALARM!", {
+        fontFamily: "Arial",
+        fontSize: "20px",
+        color: "#b91c1c",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+
+    this.tweens.add({
+      targets: this.alarmClock,
+      angle: {
+        from: -8,
+        to: 8,
+      },
+      duration: 100,
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  private disableAlarmClock(
+    _playerObject: ArcadeCollisionObject,
+    alarmObject: ArcadeCollisionObject
+  ) {
+    if (
+      this.alarmDisabled ||
+      this.gameOver ||
+      this.gameWon
+    ) {
+      return;
+    }
+
+    const alarmClock =
+      alarmObject as Phaser.Physics.Arcade.Image;
+
+    this.alarmDisabled = true;
+
+    this.tweens.killTweensOf(alarmClock);
+
+    alarmClock.setAngle(0);
+    alarmClock.disableBody(true, true);
+
+    this.cameras.main.shake(180, 0.004);
+
+    const awakeText = this.add
+      .text(480, 155, "Fine. I'm awake.", {
+        fontFamily: "Arial",
+        fontSize: "30px",
+        color: "#ffffff",
+        backgroundColor: "#334155",
+        fontStyle: "bold",
+        padding: {
+          x: 18,
+          y: 10,
+        },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(30);
+
+    const coffeeText = this.add
+      .text(480, 210, "Now find the coffee.", {
+        fontFamily: "Arial",
+        fontSize: "20px",
+        color: "#7c2d12",
+        backgroundColor: "#fde68a",
+        padding: {
+          x: 14,
+          y: 8,
+        },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(30);
+
+    this.time.delayedCall(1800, () => {
+      awakeText.destroy();
+      coffeeText.destroy();
+    });
+  }
+
   private createCoffee() {
     this.coffee = this.physics.add.staticImage(
       890,
@@ -637,7 +777,8 @@ class GameScene extends Phaser.Scene {
   }
 
   private updatePlayerMovement() {
-    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
 
     const movingLeft =
       this.cursors.left.isDown || this.wasd.left.isDown;
@@ -702,11 +843,58 @@ class GameScene extends Phaser.Scene {
     _playerObject: ArcadeCollisionObject,
     coffeeObject: ArcadeCollisionObject
   ) {
-    if (this.coffeeMode || this.gameOver || this.gameWon) {
+    if (
+      this.coffeeMode ||
+      this.gameOver ||
+      this.gameWon
+    ) {
       return;
     }
 
-    const coffee = coffeeObject as Phaser.Physics.Arcade.Image;
+    if (!this.alarmDisabled) {
+      const alarmFirstText = this.add
+        .text(480, 165, "The alarm is still ringing!", {
+          fontFamily: "Arial",
+          fontSize: "28px",
+          color: "#ffffff",
+          backgroundColor: "#dc2626",
+          fontStyle: "bold",
+          padding: {
+            x: 18,
+            y: 10,
+          },
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(30);
+
+      const goBackText = this.add
+        .text(480, 220, "Go back and turn it off.", {
+          fontFamily: "Arial",
+          fontSize: "19px",
+          color: "#1f2937",
+          backgroundColor: "#ffffff",
+          padding: {
+            x: 14,
+            y: 8,
+          },
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(30);
+
+      this.cameras.main.shake(150, 0.004);
+
+      this.time.delayedCall(1400, () => {
+        alarmFirstText.destroy();
+        goBackText.destroy();
+      });
+
+      return;
+    }
+
+    const coffee =
+      coffeeObject as Phaser.Physics.Arcade.Image;
 
     coffee.disableBody(true, true);
 
@@ -724,7 +912,6 @@ class GameScene extends Phaser.Scene {
         color: "#7c2d12",
         backgroundColor: "#fde68a",
         fontStyle: "bold",
-
         padding: {
           x: 18,
           y: 10,
@@ -740,7 +927,6 @@ class GameScene extends Phaser.Scene {
         fontSize: "19px",
         color: "#1f2937",
         backgroundColor: "#ffffff",
-
         padding: {
           x: 12,
           y: 6,
@@ -773,7 +959,6 @@ class GameScene extends Phaser.Scene {
           fontSize: "22px",
           color: "#ffffff",
           backgroundColor: "#1f2937",
-
           padding: {
             x: 14,
             y: 8,
@@ -948,6 +1133,61 @@ class GameScene extends Phaser.Scene {
     graphics.fillRoundedRect(0, 0, 40, 30, 6);
 
     graphics.generateTexture("platform", 40, 30);
+    graphics.destroy();
+  }
+
+  private createAlarmClockTexture() {
+    const graphics = this.add.graphics();
+
+    graphics.fillStyle(0xef4444);
+    graphics.fillCircle(25, 25, 20);
+
+    graphics.lineStyle(4, 0x7f1d1d);
+    graphics.strokeCircle(25, 25, 20);
+
+    graphics.fillStyle(0xffffff);
+    graphics.fillCircle(25, 25, 14);
+
+    graphics.lineStyle(3, 0x111827);
+
+    graphics.beginPath();
+    graphics.moveTo(25, 25);
+    graphics.lineTo(25, 15);
+    graphics.strokePath();
+
+    graphics.beginPath();
+    graphics.moveTo(25, 25);
+    graphics.lineTo(34, 25);
+    graphics.strokePath();
+
+    graphics.fillStyle(0x111827);
+    graphics.fillCircle(25, 25, 3);
+
+    graphics.lineStyle(4, 0x7f1d1d);
+
+    graphics.beginPath();
+    graphics.moveTo(10, 8);
+    graphics.lineTo(3, 1);
+    graphics.strokePath();
+
+    graphics.beginPath();
+    graphics.moveTo(40, 8);
+    graphics.lineTo(47, 1);
+    graphics.strokePath();
+
+    graphics.lineStyle(4, 0x111827);
+
+    graphics.beginPath();
+    graphics.moveTo(14, 43);
+    graphics.lineTo(10, 49);
+    graphics.strokePath();
+
+    graphics.beginPath();
+    graphics.moveTo(36, 43);
+    graphics.lineTo(40, 49);
+    graphics.strokePath();
+
+    graphics.generateTexture("alarm-clock", 50, 52);
     graphics.destroy();
   }
 
