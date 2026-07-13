@@ -38,12 +38,30 @@ class GameScene extends Phaser.Scene {
   private gameWon = false;
   private coffeeMode = false;
 
+  
+  private readonly gameHeight = 540;
+  private readonly worldWidth = 3200;
+
   constructor() {
     super("GameScene");
   }
 
   create() {
     this.cameras.main.setBackgroundColor("#87ceeb");
+
+    this.physics.world.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.cameras.main.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
 
     this.urgency = 0;
     this.urgencySpeed = 4;
@@ -53,59 +71,311 @@ class GameScene extends Phaser.Scene {
     this.gameWon = false;
     this.coffeeMode = false;
 
-    this.add
-      .text(20, 20, "JASMINITY", {
-        fontFamily: "Arial",
-        fontSize: "30px",
-        color: "#ffffff",
-        fontStyle: "bold",
-      })
-      .setDepth(10);
-
-    this.add
-      .text(480, 95, "Coffee first. Toilet later.", {
-        fontFamily: "Arial",
-        fontSize: "22px",
-        color: "#1f2937",
-      })
-      .setOrigin(0.5);
-
-    this.createUrgencyBar();
     this.createPlayerTexture();
     this.createPlatformTexture();
     this.createCoffeeTexture();
     this.createToiletTexture();
 
+    this.createBackground();
+    this.createApartmentDecorations();
+    this.createLevel();
+    this.createPlayer();
+    this.createCoffee();
+    this.createToilet();
+    this.createControls();
+    this.createHud();
+
+    this.cameras.main.startFollow(
+      this.player,
+      true,
+      0.08,
+      0.08
+    );
+
+    this.cameras.main.setDeadzone(260, 180);
+  }
+
+  update(_time: number, delta: number) {
+    if (this.gameOver || this.gameWon) {
+      if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+        this.scene.restart();
+      }
+
+      return;
+    }
+
+    this.updatePlayerMovement();
+    this.updateUrgency(delta);
+  }
+
+  private createBackground() {
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        250,
+        this.worldWidth,
+        500,
+        0x87ceeb
+      )
+      .setDepth(-10);
+
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        455,
+        this.worldWidth,
+        110,
+        0xd6c6a8
+      )
+      .setDepth(-9);
+
+    for (let x = 0; x < this.worldWidth; x += 160) {
+      this.add
+        .rectangle(x + 80, 460, 3, 100, 0xb8a98d, 0.45)
+        .setDepth(-8);
+    }
+  }
+
+  private createApartmentDecorations() {
+    this.add
+      .text(100, 155, "MORNING AT HOME", {
+        fontFamily: "Arial",
+        fontSize: "30px",
+        color: "#334155",
+        fontStyle: "bold",
+      })
+      .setDepth(1);
+
+    this.add
+      .rectangle(180, 390, 210, 90, 0x9f7aea)
+      .setStrokeStyle(5, 0x6b46c1)
+      .setDepth(-2);
+
+    this.add
+      .rectangle(180, 350, 180, 30, 0xc4b5fd)
+      .setDepth(-1);
+
+    this.add
+      .rectangle(110, 438, 22, 45, 0x6b46c1)
+      .setDepth(-1);
+
+    this.add
+      .rectangle(250, 438, 22, 45, 0x6b46c1)
+      .setDepth(-1);
+
+    this.add
+      .text(180, 390, "BED", {
+        fontFamily: "Arial",
+        fontSize: "18px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setDepth(1);
+
+    this.add
+      .rectangle(500, 330, 170, 125, 0xf8fafc)
+      .setStrokeStyle(8, 0x475569)
+      .setDepth(-2);
+
+    this.add
+      .rectangle(500, 330, 6, 125, 0x475569)
+      .setDepth(-1);
+
+    this.add
+      .rectangle(500, 330, 170, 6, 0x475569)
+      .setDepth(-1);
+
+    this.add
+      .circle(475, 310, 28, 0xfacc15, 0.9)
+      .setDepth(-3);
+
+    this.add
+      .rectangle(850, 400, 180, 45, 0x8b5e3c)
+      .setDepth(-2);
+
+    this.add
+      .rectangle(800, 445, 15, 65, 0x5c3d2e)
+      .setDepth(-2);
+
+    this.add
+      .rectangle(900, 445, 15, 65, 0x5c3d2e)
+      .setDepth(-2);
+
+    this.add
+      .text(850, 370, "COFFEE TABLE", {
+        fontFamily: "Arial",
+        fontSize: "16px",
+        color: "#334155",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .rectangle(1220, 315, 240, 210, 0xf1f5f9)
+      .setStrokeStyle(8, 0x64748b)
+      .setDepth(-2);
+
+    this.add
+      .rectangle(1220, 315, 8, 210, 0x64748b)
+      .setDepth(-1);
+
+    this.add
+      .rectangle(1220, 315, 240, 8, 0x64748b)
+      .setDepth(-1);
+
+    this.add
+      .text(1220, 205, "THE LONG HALLWAY", {
+        fontFamily: "Arial",
+        fontSize: "22px",
+        color: "#334155",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .rectangle(1760, 350, 210, 180, 0xf59e0b)
+      .setStrokeStyle(8, 0x92400e)
+      .setDepth(-2);
+
+    this.add
+      .circle(1825, 355, 8, 0x78350f)
+      .setDepth(-1);
+
+    this.add
+      .text(1760, 240, "KITCHEN", {
+        fontFamily: "Arial",
+        fontSize: "22px",
+        color: "#334155",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .rectangle(2180, 405, 280, 70, 0x38bdf8)
+      .setStrokeStyle(6, 0x0369a1)
+      .setDepth(-2);
+
+    this.add
+      .text(2180, 405, "SOFA OF PROCRASTINATION", {
+        fontFamily: "Arial",
+        fontSize: "17px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .rectangle(2720, 325, 240, 270, 0xe2e8f0)
+      .setStrokeStyle(10, 0x64748b)
+      .setDepth(-2);
+
+    this.add
+      .text(2720, 175, "BATHROOM", {
+        fontFamily: "Arial",
+        fontSize: "26px",
+        color: "#334155",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(3030, 175, "FINISH", {
+        fontFamily: "Arial",
+        fontSize: "28px",
+        color: "#15803d",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+  }
+
+  private createLevel() {
     this.platforms = this.physics.add.staticGroup();
 
     this.platforms
-      .create(480, 510, "platform")
-      .setScale(24, 1)
+      .create(this.worldWidth / 2, 515, "platform")
+      .setScale(this.worldWidth / 40, 1)
       .refreshBody();
 
+    this.createPlatform(430, 415, 3);
+    this.createPlatform(650, 350, 3);
+    this.createPlatform(890, 410, 4);
+
+    this.createPlatform(1120, 360, 3);
+    this.createPlatform(1370, 300, 3);
+    this.createPlatform(1570, 395, 3);
+
+    this.createPlatform(1880, 350, 4);
+    this.createPlatform(2130, 285, 3);
+    this.createPlatform(2370, 390, 4);
+
+    this.createPlatform(2600, 330, 3);
+    this.createPlatform(2860, 400, 4);
+
+    this.add
+      .text(70, 470, "START", {
+        fontFamily: "Arial",
+        fontSize: "20px",
+        color: "#166534",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(980, 455, "Mind the furniture.", {
+        fontFamily: "Arial",
+        fontSize: "17px",
+        color: "#334155",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(2020, 455, "No time to sit down.", {
+        fontFamily: "Arial",
+        fontSize: "17px",
+        color: "#334155",
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(2660, 455, "Almost there!", {
+        fontFamily: "Arial",
+        fontSize: "20px",
+        color: "#b91c1c",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+  }
+
+  private createPlatform(
+    x: number,
+    y: number,
+    scaleX: number
+  ) {
     this.platforms
-      .create(310, 410, "platform")
-      .setScale(4, 1)
+      .create(x, y, "platform")
+      .setScale(scaleX, 1)
       .refreshBody();
+  }
 
-    this.platforms
-      .create(525, 335, "platform")
-      .setScale(4, 1)
-      .refreshBody();
-
-    this.platforms
-      .create(730, 420, "platform")
-      .setScale(3, 1)
-      .refreshBody();
-
+  private createPlayer() {
     this.player = this.physics.add.sprite(100, 440, "jasmin");
 
     this.player.setCollideWorldBounds(true);
     this.player.setBounce(0.05);
+    this.player.setDepth(5);
 
     this.physics.add.collider(this.player, this.platforms);
+  }
 
-    this.coffee = this.physics.add.staticImage(525, 290, "coffee");
+  private createCoffee() {
+    this.coffee = this.physics.add.staticImage(
+      890,
+      350,
+      "coffee"
+    );
+
+    this.coffee.setDepth(4);
 
     this.physics.add.overlap(
       this.player,
@@ -115,7 +385,24 @@ class GameScene extends Phaser.Scene {
       this
     );
 
-    this.toilet = this.physics.add.staticImage(890, 445, "toilet");
+    this.add
+      .text(890, 305, "COFFEE", {
+        fontFamily: "Arial",
+        fontSize: "18px",
+        color: "#7c2d12",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+  }
+
+  private createToilet() {
+    this.toilet = this.physics.add.staticImage(
+      3030,
+      440,
+      "toilet"
+    );
+
+    this.toilet.setDepth(4);
 
     this.physics.add.overlap(
       this.player,
@@ -125,6 +412,17 @@ class GameScene extends Phaser.Scene {
       this
     );
 
+    this.add
+      .text(3030, 365, "TOILET", {
+        fontFamily: "Arial",
+        fontSize: "20px",
+        color: "#166534",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+  }
+
+  private createControls() {
     this.cursors = this.input.keyboard!.createCursorKeys();
 
     this.wasd = {
@@ -144,41 +442,39 @@ class GameScene extends Phaser.Scene {
     this.restartKey = this.input.keyboard!.addKey(
       Phaser.Input.Keyboard.KeyCodes.R
     );
+  }
+
+  private createHud() {
+    this.add
+      .rectangle(480, 48, 960, 96, 0x0f172a, 0.86)
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.add
+      .text(20, 18, "JASMINITY", {
+        fontFamily: "Arial",
+        fontSize: "27px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setScrollFactor(0)
+      .setDepth(21);
 
     this.add
       .text(
-        480,
-        125,
+        20,
+        60,
         "A / D or arrows · Space / W / Up to jump",
         {
           fontFamily: "Arial",
-          fontSize: "17px",
-          color: "#1f2937",
+          fontSize: "15px",
+          color: "#cbd5e1",
         }
       )
-      .setOrigin(0.5);
+      .setScrollFactor(0)
+      .setDepth(21);
 
-    this.add
-      .text(890, 380, "GOAL", {
-        fontFamily: "Arial",
-        fontSize: "18px",
-        color: "#1f2937",
-        fontStyle: "bold",
-      })
-      .setOrigin(0.5);
-  }
-
-  update(_time: number, delta: number) {
-    if (this.gameOver || this.gameWon) {
-      if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
-        this.scene.restart();
-      }
-
-      return;
-    }
-
-    this.updatePlayerMovement();
-    this.updateUrgency(delta);
+    this.createUrgencyBar();
   }
 
   private updatePlayerMovement() {
@@ -263,7 +559,7 @@ class GameScene extends Phaser.Scene {
     this.player.setScale(1.15);
 
     const monsterText = this.add
-      .text(480, 185, "COFFEE MONSTER MODE!", {
+      .text(480, 155, "COFFEE MONSTER MODE!", {
         fontFamily: "Arial",
         fontSize: "32px",
         color: "#7c2d12",
@@ -276,10 +572,11 @@ class GameScene extends Phaser.Scene {
         },
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(30);
 
     const warningText = this.add
-      .text(480, 235, "Faster Jasmin. Faster urgency.", {
+      .text(480, 205, "Faster Jasmin. Faster urgency.", {
         fontFamily: "Arial",
         fontSize: "19px",
         color: "#1f2937",
@@ -291,6 +588,7 @@ class GameScene extends Phaser.Scene {
         },
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(30);
 
     this.cameras.main.shake(250, 0.006);
@@ -311,7 +609,7 @@ class GameScene extends Phaser.Scene {
       warningText.destroy();
 
       const finishedText = this.add
-        .text(480, 185, "Coffee mode finished.", {
+        .text(480, 155, "Coffee mode finished.", {
           fontFamily: "Arial",
           fontSize: "22px",
           color: "#ffffff",
@@ -323,6 +621,7 @@ class GameScene extends Phaser.Scene {
           },
         })
         .setOrigin(0.5)
+        .setScrollFactor(0)
         .setDepth(30);
 
       this.time.delayedCall(1500, () => {
@@ -347,35 +646,39 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.flash(400, 255, 255, 255);
 
     this.add
-      .rectangle(480, 270, 960, 540, 0x0f172a, 0.82)
+      .rectangle(480, 270, 960, 540, 0x0f172a, 0.88)
+      .setScrollFactor(0)
       .setDepth(50);
 
     this.add
-      .text(480, 190, "MISSION COMPLETE", {
+      .text(480, 185, "MISSION COMPLETE", {
         fontFamily: "Arial",
         fontSize: "54px",
         color: "#86efac",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(51);
 
     this.add
-      .text(480, 270, "You survived another school day.", {
+      .text(480, 265, "Jasmin reached the toilet.", {
         fontFamily: "Arial",
         fontSize: "25px",
         color: "#ffffff",
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(51);
 
     this.add
-      .text(480, 325, "The toilet urgency is finally zero.", {
+      .text(480, 320, "The urgency is finally zero.", {
         fontFamily: "Arial",
         fontSize: "20px",
         color: "#cbd5e1",
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(51);
 
     this.add
@@ -386,28 +689,32 @@ class GameScene extends Phaser.Scene {
         fontStyle: "bold",
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(51);
   }
 
   private createUrgencyBar() {
     this.add
-      .rectangle(480, 45, 310, 34, 0x111827)
+      .rectangle(710, 48, 310, 34, 0x111827)
       .setStrokeStyle(3, 0xffffff)
+      .setScrollFactor(0)
       .setDepth(20);
 
     this.urgencyBar = this.add
-      .rectangle(330, 45, 0, 24, 0x22c55e)
+      .rectangle(560, 48, 0, 24, 0x22c55e)
       .setOrigin(0, 0.5)
+      .setScrollFactor(0)
       .setDepth(21);
 
     this.urgencyText = this.add
-      .text(480, 45, "TOILET URGENCY: 0%", {
+      .text(710, 48, "TOILET URGENCY: 0%", {
         fontFamily: "Arial",
         fontSize: "16px",
         color: "#ffffff",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(22);
   }
 
@@ -418,7 +725,8 @@ class GameScene extends Phaser.Scene {
     this.physics.pause();
 
     this.add
-      .rectangle(480, 270, 960, 540, 0x111827, 0.75)
+      .rectangle(480, 270, 960, 540, 0x111827, 0.82)
+      .setScrollFactor(0)
       .setDepth(50);
 
     this.add
@@ -429,6 +737,7 @@ class GameScene extends Phaser.Scene {
         fontStyle: "bold",
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(51);
 
     this.add
@@ -438,6 +747,7 @@ class GameScene extends Phaser.Scene {
         color: "#ffffff",
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(51);
 
     this.add
@@ -448,6 +758,7 @@ class GameScene extends Phaser.Scene {
         fontStyle: "bold",
       })
       .setOrigin(0.5)
+      .setScrollFactor(0)
       .setDepth(51);
   }
 
