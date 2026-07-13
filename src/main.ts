@@ -1,6 +1,111 @@
 import Phaser from "phaser";
 import "./style.css";
 
+
+const JASMINITY_AUDIO_FILES: Record<string, string> = {
+  alarm: "/audio/alarm.wav",
+  coffee: "/audio/coffee.wav",
+  metro: "/audio/metro.wav",
+  school: "/audio/school.wav",
+  bun: "/audio/bun.wav",
+  trainBreak: "/audio/train-break.wav",
+  bicycle: "/audio/bicycle.wav",
+  door: "/audio/door.wav",
+  toilet: "/audio/toilet.wav",
+  finalMusic: "/audio/final-music.wav",
+};
+
+let jasminitySoundEnabled = true;
+
+function preloadJasminityAudio(
+  scene: Phaser.Scene
+) {
+  Object.entries(
+    JASMINITY_AUDIO_FILES
+  ).forEach(([key, path]) => {
+    if (!scene.cache.audio.exists(key)) {
+      scene.load.audio(key, path);
+    }
+  });
+}
+
+function playJasminitySound(
+  scene: Phaser.Scene,
+  key: string,
+  config: Phaser.Types.Sound.SoundConfig = {}
+) {
+  if (
+    !jasminitySoundEnabled ||
+    !scene.cache.audio.exists(key)
+  ) {
+    return;
+  }
+
+  scene.sound.play(key, config);
+}
+
+function stopJasminitySound(
+  scene: Phaser.Scene,
+  key: string
+) {
+  scene.sound.getAll(key).forEach(
+    (sound) => sound.stop()
+  );
+}
+
+function createSoundToggle(
+  scene: Phaser.Scene
+) {
+  const button = scene.add
+    .rectangle(
+      875,
+      62,
+      145,
+      34,
+      0x334155,
+      0.96
+    )
+    .setStrokeStyle(2, 0xffffff)
+    .setScrollFactor(0)
+    .setDepth(120)
+    .setInteractive({
+      useHandCursor: true,
+    });
+
+  const label = scene.add
+    .text(
+      875,
+      62,
+      jasminitySoundEnabled
+        ? "SOUND ON"
+        : "SOUND OFF",
+      {
+        fontFamily: "Arial",
+        fontSize: "14px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      }
+    )
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setDepth(121);
+
+  button.on("pointerdown", () => {
+    jasminitySoundEnabled =
+      !jasminitySoundEnabled;
+
+    label.setText(
+      jasminitySoundEnabled
+        ? "SOUND ON"
+        : "SOUND OFF"
+    );
+
+    if (!jasminitySoundEnabled) {
+      scene.sound.stopAll();
+    }
+  });
+}
+
 type ArcadeCollisionObject =
   | Phaser.Types.Physics.Arcade.GameObjectWithBody
   | Phaser.Physics.Arcade.Body
@@ -65,7 +170,18 @@ class ApartmentScene extends Phaser.Scene {
     super("ApartmentScene");
   }
 
+  preload() {
+    preloadJasminityAudio(this);
+  }
+
   create() {
+    this.events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => {
+        this.sound.stopAll();
+      }
+    );
+
     this.cameras.main.setBackgroundColor("#87ceeb");
 
     this.physics.world.setBounds(
@@ -120,6 +236,7 @@ class ApartmentScene extends Phaser.Scene {
     this.createExitDoor();
     this.createControls();
     this.createHud();
+    createSoundToggle(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -296,6 +413,7 @@ class ApartmentScene extends Phaser.Scene {
 
     this.gameStarted = true;
     this.events.emit("start-game");
+    playJasminitySound(this, "alarm", { volume: 0.65 });
 
     this.objectiveText.setText(
       "OBJECTIVE: TURN OFF THE ALARM"
@@ -1442,6 +1560,8 @@ class ApartmentScene extends Phaser.Scene {
 
     this.coffeeCollected = true;
 
+    playJasminitySound(this, "coffee", { volume: 0.75 });
+
     this.objectiveText.setText(
       "OBJECTIVE: REACH THE EXIT"
     );
@@ -2289,7 +2409,18 @@ class MetroScene extends Phaser.Scene {
     this.urgency = 0;
   }
 
+  preload() {
+    preloadJasminityAudio(this);
+  }
+
   create() {
+    this.events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => {
+        this.sound.stopAll();
+      }
+    );
+
     this.physics.world.resume();
 
     this.cameras.main.setBackgroundColor("#dbeafe");
@@ -2330,6 +2461,7 @@ class MetroScene extends Phaser.Scene {
     this.createTrain();
     this.createControls();
     this.createHud();
+    createSoundToggle(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -2559,6 +2691,7 @@ class MetroScene extends Phaser.Scene {
 
     this.gameStarted = true;
     this.events.emit("start-metro");
+    playJasminitySound(this, "metro", { volume: 0.38 });
 
     this.cameras.main.flash(
       250,
@@ -4100,7 +4233,18 @@ class SchoolScene extends Phaser.Scene {
     super("SchoolScene");
   }
 
+  preload() {
+    preloadJasminityAudio(this);
+  }
+
   create() {
+    this.events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => {
+        this.sound.stopAll();
+      }
+    );
+
     this.physics.world.resume();
 
     this.cameras.main.setBackgroundColor("#fef3c7");
@@ -4144,6 +4288,7 @@ class SchoolScene extends Phaser.Scene {
     this.createClassroomDoor();
     this.createControls();
     this.createHud();
+    createSoundToggle(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -4376,6 +4521,7 @@ class SchoolScene extends Phaser.Scene {
 
     this.gameStarted = true;
     this.events.emit("start-school");
+    playJasminitySound(this, "school", { volume: 0.30 });
 
     this.cameras.main.flash(
       250,
@@ -6075,7 +6221,18 @@ class BunScene extends Phaser.Scene {
     super("BunScene");
   }
 
+  preload() {
+    preloadJasminityAudio(this);
+  }
+
   create() {
+    this.events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => {
+        this.sound.stopAll();
+      }
+    );
+
     this.physics.world.resume();
 
     this.cameras.main.setBackgroundColor("#fff7ed");
@@ -6126,6 +6283,7 @@ class BunScene extends Phaser.Scene {
     this.createSchoolExit();
     this.createControls();
     this.createHud();
+    createSoundToggle(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -6953,6 +7111,8 @@ class BunScene extends Phaser.Scene {
     this.objectiveText.setText(
       "OBJECTIVE: LEAVE THE SCHOOL"
     );
+
+    playJasminitySound(this, "bun", { volume: 0.75 });
 
     this.urgency = Math.max(
       0,
@@ -8161,7 +8321,18 @@ class TrainHomeScene extends Phaser.Scene {
     super("TrainHomeScene");
   }
 
+  preload() {
+    preloadJasminityAudio(this);
+  }
+
   create() {
+    this.events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => {
+        this.sound.stopAll();
+      }
+    );
+
     this.physics.world.resume();
 
     this.cameras.main.setBackgroundColor("#e2e8f0");
@@ -8205,6 +8376,7 @@ class TrainHomeScene extends Phaser.Scene {
     this.createBrokenDoor();
     this.createControls();
     this.createHud();
+    createSoundToggle(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -8467,6 +8639,8 @@ class TrainHomeScene extends Phaser.Scene {
     }
 
     this.trainBroken = true;
+
+    playJasminitySound(this, "trainBreak", { volume: 0.75 });
 
     this.objectiveText.setText(
       "OBJECTIVE: EXIT THE BROKEN TRAIN"
@@ -10096,7 +10270,18 @@ class BicycleScene extends Phaser.Scene {
     super("BicycleScene");
   }
 
+  preload() {
+    preloadJasminityAudio(this);
+  }
+
   create() {
+    this.events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => {
+        this.sound.stopAll();
+      }
+    );
+
     this.physics.world.resume();
 
     this.cameras.main.setBackgroundColor("#bfdbfe");
@@ -10145,6 +10330,7 @@ class BicycleScene extends Phaser.Scene {
     this.createHomeDoor();
     this.createControls();
     this.createHud();
+    createSoundToggle(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -10724,6 +10910,8 @@ class BicycleScene extends Phaser.Scene {
       bicycleObject as Phaser.Physics.Arcade.Sprite;
 
     this.bicycleCollected = true;
+
+    playJasminitySound(this, "bicycle", { volume: 0.75 });
 
     this.tweens.killTweensOf(bicycle);
 
@@ -12129,7 +12317,18 @@ class StairsScene extends Phaser.Scene {
     super("StairsScene");
   }
 
+  preload() {
+    preloadJasminityAudio(this);
+  }
+
   create() {
+    this.events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => {
+        this.sound.stopAll();
+      }
+    );
+
     this.physics.world.resume();
 
     this.cameras.main.setBackgroundColor("#f5f3ff");
@@ -12169,6 +12368,7 @@ class StairsScene extends Phaser.Scene {
     this.createApartmentDoor();
     this.createControls();
     this.createHud();
+    createSoundToggle(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -12819,6 +13019,8 @@ class StairsScene extends Phaser.Scene {
   }
 
   private reachApartment() {
+    playJasminitySound(this, "door", { volume: 0.65 });
+
     if (
       this.gameOver ||
       this.levelComplete
@@ -13831,7 +14033,18 @@ class FinalApartmentScene extends Phaser.Scene {
     super("FinalApartmentScene");
   }
 
+  preload() {
+    preloadJasminityAudio(this);
+  }
+
   create() {
+    this.events.once(
+      Phaser.Scenes.Events.SHUTDOWN,
+      () => {
+        this.sound.stopAll();
+      }
+    );
+
     this.physics.world.resume();
 
     this.cameras.main.setBackgroundColor("#fde68a");
@@ -13871,6 +14084,7 @@ class FinalApartmentScene extends Phaser.Scene {
     this.createToilet();
     this.createControls();
     this.createHud();
+    createSoundToggle(this);
     this.createStartScreen();
 
     this.cameras.main.startFollow(
@@ -14096,6 +14310,7 @@ class FinalApartmentScene extends Phaser.Scene {
 
     this.gameStarted = true;
     this.events.emit("start-final");
+    playJasminitySound(this, "door", { volume: 0.65 });
 
     this.cameras.main.flash(
       250,
@@ -14530,6 +14745,8 @@ class FinalApartmentScene extends Phaser.Scene {
   private startFinale() {
     this.finaleStarted = true;
 
+    playJasminitySound(this, "toilet", { volume: 0.85 });
+
     this.player.setVelocity(
       0,
       0
@@ -14566,6 +14783,10 @@ class FinalApartmentScene extends Phaser.Scene {
   }
 
   private createCelebration() {
+    playJasminitySound(this, "finalMusic", {
+      volume: 0.42,
+      loop: true,
+    });
     const overlay = this.add
       .rectangle(
         480,
@@ -14891,6 +15112,8 @@ class FinalApartmentScene extends Phaser.Scene {
     replayButton.on(
       "pointerdown",
       () => {
+        stopJasminitySound(this, "finalMusic");
+
         this.scene.start(
           "ApartmentScene"
         );
