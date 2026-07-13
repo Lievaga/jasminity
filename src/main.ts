@@ -18,6 +18,7 @@ class GameScene extends Phaser.Scene {
   };
 
   private restartKey!: Phaser.Input.Keyboard.Key;
+  private enterKey!: Phaser.Input.Keyboard.Key;
 
   private platforms!: Phaser.Physics.Arcade.StaticGroup;
   private coffee!: Phaser.Physics.Arcade.Image;
@@ -34,11 +35,11 @@ class GameScene extends Phaser.Scene {
   private urgencyBar!: Phaser.GameObjects.Rectangle;
   private urgencyText!: Phaser.GameObjects.Text;
 
+  private gameStarted = false;
   private gameOver = false;
   private gameWon = false;
   private coffeeMode = false;
 
-  
   private readonly gameHeight = 540;
   private readonly worldWidth = 3200;
 
@@ -67,6 +68,7 @@ class GameScene extends Phaser.Scene {
     this.urgencySpeed = 4;
     this.currentMoveSpeed = this.normalMoveSpeed;
 
+    this.gameStarted = false;
     this.gameOver = false;
     this.gameWon = false;
     this.coffeeMode = false;
@@ -84,6 +86,7 @@ class GameScene extends Phaser.Scene {
     this.createToilet();
     this.createControls();
     this.createHud();
+    this.createStartScreen();
 
     this.cameras.main.startFollow(
       this.player,
@@ -96,6 +99,17 @@ class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
+    if (!this.gameStarted) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.startGame();
+      }
+
+      return;
+    }
+
     if (this.gameOver || this.gameWon) {
       if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
         this.scene.restart();
@@ -106,6 +120,147 @@ class GameScene extends Phaser.Scene {
 
     this.updatePlayerMovement();
     this.updateUrgency(delta);
+  }
+
+  private createStartScreen() {
+    const overlay = this.add
+      .rectangle(480, 270, 960, 540, 0x0f172a, 0.88)
+      .setScrollFactor(0)
+      .setDepth(100);
+
+    const smallTitle = this.add
+      .text(480, 105, "JASMINITY PRESENTS", {
+        fontFamily: "Arial",
+        fontSize: "20px",
+        color: "#facc15",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const title = this.add
+      .text(480, 165, "MORNING AT HOME", {
+        fontFamily: "Arial",
+        fontSize: "50px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const description = this.add
+      .text(
+        480,
+        235,
+        "Coffee first. Toilet urgently.",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const instructions = this.add
+      .text(
+        480,
+        285,
+        "Reach the toilet before the urgency reaches 100%.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#94a3b8",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const startButton = this.add
+      .rectangle(480, 370, 260, 70, 0x22c55e)
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(101)
+      .setInteractive({ useHandCursor: true });
+
+    const startText = this.add
+      .text(480, 370, "START", {
+        fontFamily: "Arial",
+        fontSize: "30px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(102);
+
+    const keyboardText = this.add
+      .text(480, 435, "Click START · Enter · Space", {
+        fontFamily: "Arial",
+        fontSize: "17px",
+        color: "#facc15",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const startObjects = [
+      overlay,
+      smallTitle,
+      title,
+      description,
+      instructions,
+      startButton,
+      startText,
+      keyboardText,
+    ];
+
+    const begin = () => {
+      if (this.gameStarted) {
+        return;
+      }
+
+      this.startGame();
+
+      startObjects.forEach((gameObject) => {
+        gameObject.destroy();
+      });
+    };
+
+    startButton.on("pointerover", () => {
+      startButton.setFillStyle(0x16a34a);
+      startButton.setScale(1.04);
+    });
+
+    startButton.on("pointerout", () => {
+      startButton.setFillStyle(0x22c55e);
+      startButton.setScale(1);
+    });
+
+    startButton.on("pointerdown", begin);
+
+    this.events.once("start-game", () => {
+      startObjects.forEach((gameObject) => {
+        if (gameObject.active) {
+          gameObject.destroy();
+        }
+      });
+    });
+  }
+
+  private startGame() {
+    if (this.gameStarted) {
+      return;
+    }
+
+    this.gameStarted = true;
+    this.events.emit("start-game");
+
+    this.cameras.main.flash(250, 255, 255, 255);
   }
 
   private createBackground() {
@@ -441,6 +596,10 @@ class GameScene extends Phaser.Scene {
 
     this.restartKey = this.input.keyboard!.addKey(
       Phaser.Input.Keyboard.KeyCodes.R
+    );
+
+    this.enterKey = this.input.keyboard!.addKey(
+      Phaser.Input.Keyboard.KeyCodes.ENTER
     );
   }
 
