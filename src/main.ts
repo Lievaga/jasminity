@@ -4189,6 +4189,13 @@ class SchoolScene extends Phaser.Scene {
         this.scene.restart();
       }
 
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.scene.start("BunScene");
+      }
+
       return;
     }
 
@@ -5181,14 +5188,45 @@ class SchoolScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(51);
 
+    const bunButton = this.add
+      .rectangle(
+        480,
+        405,
+        350,
+        62,
+        0xf59e0b
+      )
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(51)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const bunButtonText = this.add
+      .text(
+        480,
+        405,
+        "CONTINUE TO THE BUN",
+        {
+          fontFamily: "Arial",
+          fontSize: "23px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(52);
+
     this.add
       .text(
         480,
-        410,
-        "The bun transformation comes next.",
+        465,
+        "Click · Enter · Space     |     R replay school",
         {
           fontFamily: "Arial",
-          fontSize: "20px",
+          fontSize: "16px",
           color: "#cbd5e1",
         }
       )
@@ -5196,20 +5234,21 @@ class SchoolScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(51);
 
-    this.add
-      .text(
-        480,
-        455,
-        "Press R to replay the school",
-        {
-          fontFamily: "Arial",
-          fontSize: "17px",
-          color: "#ffffff",
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(51);
+    bunButton.on("pointerover", () => {
+      bunButton.setFillStyle(0xd97706);
+      bunButton.setScale(1.03);
+      bunButtonText.setScale(1.03);
+    });
+
+    bunButton.on("pointerout", () => {
+      bunButton.setFillStyle(0xf59e0b);
+      bunButton.setScale(1);
+      bunButtonText.setScale(1);
+    });
+
+    bunButton.on("pointerdown", () => {
+      this.scene.start("BunScene");
+    });
   }
 
   private createControls() {
@@ -5979,6 +6018,2054 @@ class SchoolScene extends Phaser.Scene {
   }
 }
 
+
+class BunScene extends Phaser.Scene {
+  private player!: Phaser.Physics.Arcade.Sprite;
+  private platforms!: Phaser.Physics.Arcade.StaticGroup;
+  private queuePeople!: Phaser.Physics.Arcade.StaticGroup;
+  private bunObstacles!: Phaser.Physics.Arcade.StaticGroup;
+
+  private bun!: Phaser.Physics.Arcade.Image;
+  private schoolExit!: Phaser.Physics.Arcade.Image;
+
+  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+
+  private wasd!: {
+    left: Phaser.Input.Keyboard.Key;
+    right: Phaser.Input.Keyboard.Key;
+    up: Phaser.Input.Keyboard.Key;
+  };
+
+  private restartKey!: Phaser.Input.Keyboard.Key;
+  private enterKey!: Phaser.Input.Keyboard.Key;
+
+  private urgency = 0;
+  private urgencyMax = 100;
+  private urgencySpeed = 4;
+
+  private urgencyBar!: Phaser.GameObjects.Rectangle;
+  private urgencyText!: Phaser.GameObjects.Text;
+  private objectiveText!: Phaser.GameObjects.Text;
+
+  private gameStarted = false;
+  private gameOver = false;
+  private levelComplete = false;
+  private bunCollected = false;
+  private exitWarningActive = false;
+
+  private triggeredPeople = new Set<string>();
+  private triggeredObstacles = new Set<string>();
+
+  private currentPlayerTexture = "jasmin-idle";
+  private walkFrame = 0;
+  private lastWalkFrameSwitch = 0;
+
+  private currentMoveSpeed = 225;
+  private currentJumpVelocity = -435;
+
+  private readonly normalMoveSpeed = 225;
+  private readonly bunMoveSpeed = 285;
+  private readonly normalJumpVelocity = -435;
+  private readonly bunJumpVelocity = -475;
+
+  private readonly gameHeight = 540;
+  private readonly worldWidth = 3200;
+
+  constructor() {
+    super("BunScene");
+  }
+
+  create() {
+    this.physics.world.resume();
+
+    this.cameras.main.setBackgroundColor("#fff7ed");
+
+    this.physics.world.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.cameras.main.setBounds(
+      0,
+      0,
+      this.worldWidth,
+      this.gameHeight
+    );
+
+    this.urgency = 0;
+    this.urgencySpeed = 4;
+
+    this.currentMoveSpeed =
+      this.normalMoveSpeed;
+
+    this.currentJumpVelocity =
+      this.normalJumpVelocity;
+
+    this.gameStarted = false;
+    this.gameOver = false;
+    this.levelComplete = false;
+    this.bunCollected = false;
+    this.exitWarningActive = false;
+
+    this.triggeredPeople.clear();
+    this.triggeredObstacles.clear();
+
+    this.currentPlayerTexture = "jasmin-idle";
+    this.walkFrame = 0;
+    this.lastWalkFrameSwitch = 0;
+
+    this.createBunTextures();
+    this.createBackground();
+    this.createLevel();
+    this.createPlayer();
+    this.createQueuePeople();
+    this.createObstacles();
+    this.createBun();
+    this.createSchoolExit();
+    this.createControls();
+    this.createHud();
+    this.createStartScreen();
+
+    this.cameras.main.startFollow(
+      this.player,
+      true,
+      0.08,
+      0.08
+    );
+
+    this.cameras.main.setDeadzone(260, 180);
+  }
+
+  update(time: number, delta: number) {
+    if (!this.gameStarted) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)
+      ) {
+        this.startBunLevel();
+      }
+
+      return;
+    }
+
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.restartKey)
+      ) {
+        this.scene.restart();
+      }
+
+      return;
+    }
+
+    this.updatePlayerMovement();
+    this.updatePlayerAppearance(time);
+    this.updateUrgency(delta);
+  }
+
+  private createStartScreen() {
+    const overlay = this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(100);
+
+    const levelText = this.add
+      .text(480, 90, "LEVEL 4", {
+        fontFamily: "Arial",
+        fontSize: "21px",
+        color: "#facc15",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const title = this.add
+      .text(
+        480,
+        150,
+        "THE BUN BREAK",
+        {
+          fontFamily: "Arial",
+          fontSize: "50px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const objective = this.add
+      .text(
+        480,
+        215,
+        "OBJECTIVE: FIND THE BUN",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const urgencyText = this.add
+      .text(
+        480,
+        265,
+        "Starting urgency: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#fca5a5",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const instruction = this.add
+      .text(
+        480,
+        310,
+        "Get through the queue and buy something delicious.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const button = this.add
+      .rectangle(
+        480,
+        400,
+        320,
+        68,
+        0xf59e0b
+      )
+      .setStrokeStyle(4, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(101)
+      .setInteractive({
+        useHandCursor: true,
+      });
+
+    const buttonText = this.add
+      .text(
+        480,
+        400,
+        "GO TO THE KIOSK",
+        {
+          fontFamily: "Arial",
+          fontSize: "26px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(102);
+
+    const keyboardText = this.add
+      .text(
+        480,
+        465,
+        "Click · Enter · Space",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    const objects = [
+      overlay,
+      levelText,
+      title,
+      objective,
+      urgencyText,
+      instruction,
+      button,
+      buttonText,
+      keyboardText,
+    ];
+
+    button.on("pointerover", () => {
+      button.setFillStyle(0xd97706);
+      button.setScale(1.03);
+      buttonText.setScale(1.03);
+    });
+
+    button.on("pointerout", () => {
+      button.setFillStyle(0xf59e0b);
+      button.setScale(1);
+      buttonText.setScale(1);
+    });
+
+    button.on("pointerdown", () => {
+      this.startBunLevel();
+    });
+
+    this.events.once("start-bun", () => {
+      objects.forEach((object) => {
+        if (object.active) {
+          object.destroy();
+        }
+      });
+    });
+  }
+
+  private startBunLevel() {
+    if (this.gameStarted) {
+      return;
+    }
+
+    this.gameStarted = true;
+    this.events.emit("start-bun");
+
+    this.cameras.main.flash(
+      250,
+      255,
+      255,
+      255
+    );
+
+    this.showMessage(
+      "LUNCH BREAK!",
+      "One bun. Maximum happiness.",
+      0xf59e0b
+    );
+  }
+
+  private createBackground() {
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        250,
+        this.worldWidth,
+        500,
+        0xfff7ed
+      )
+      .setDepth(-10);
+
+    this.add
+      .rectangle(
+        this.worldWidth / 2,
+        455,
+        this.worldWidth,
+        110,
+        0xd6c6a8
+      )
+      .setDepth(-9);
+
+    for (
+      let x = 0;
+      x < this.worldWidth;
+      x += 160
+    ) {
+      this.add
+        .rectangle(
+          x + 80,
+          460,
+          3,
+          100,
+          0xb8a98d,
+          0.45
+        )
+        .setDepth(-8);
+    }
+
+    this.add
+      .text(
+        145,
+        150,
+        "SCHOOL KIOSK",
+        {
+          fontFamily: "Arial",
+          fontSize: "34px",
+          color: "#9a3412",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .rectangle(
+        610,
+        345,
+        360,
+        180,
+        0xfed7aa
+      )
+      .setStrokeStyle(8, 0x9a3412)
+      .setDepth(-3);
+
+    this.add
+      .rectangle(
+        610,
+        270,
+        380,
+        35,
+        0xea580c
+      )
+      .setDepth(-2);
+
+    this.add
+      .text(
+        610,
+        270,
+        "SNACKS · BUNS · JUICE",
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setDepth(-1);
+
+    this.add
+      .text(
+        1330,
+        185,
+        "THE QUEUE",
+        {
+          fontFamily: "Arial",
+          fontSize: "27px",
+          color: "#7c2d12",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .rectangle(
+        2100,
+        350,
+        270,
+        190,
+        0xf8fafc
+      )
+      .setStrokeStyle(8, 0x64748b)
+      .setDepth(-3);
+
+    this.add
+      .text(
+        2100,
+        225,
+        "CAFETERIA",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#334155",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .rectangle(
+        2610,
+        395,
+        280,
+        70,
+        0x38bdf8
+      )
+      .setStrokeStyle(6, 0x0369a1)
+      .setDepth(-3);
+
+    this.add
+      .text(
+        2610,
+        395,
+        "BENCH OF SNACKING",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        3060,
+        165,
+        "SCHOOL EXIT",
+        {
+          fontFamily: "Arial",
+          fontSize: "30px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private createLevel() {
+    this.platforms =
+      this.physics.add.staticGroup();
+
+    this.platforms
+      .create(
+        this.worldWidth / 2,
+        515,
+        "platform"
+      )
+      .setScale(
+        this.worldWidth / 40,
+        1
+      )
+      .refreshBody();
+
+    this.createPlatform(420, 415, 3);
+    this.createPlatform(660, 350, 3);
+    this.createPlatform(900, 410, 4);
+
+    this.createPlatform(1160, 360, 3);
+    this.createPlatform(1410, 300, 3);
+    this.createPlatform(1660, 390, 3);
+
+    this.createPlatform(1900, 340, 4);
+    this.createPlatform(2170, 285, 3);
+    this.createPlatform(2420, 390, 4);
+
+    this.createPlatform(2700, 335, 3);
+    this.createPlatform(2940, 390, 3);
+
+    this.add
+      .text(
+        90,
+        470,
+        "START",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        1450,
+        455,
+        "The queue has no end.",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#475569",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.add
+      .text(
+        2730,
+        455,
+        "Eat first. Escape second.",
+        {
+          fontFamily: "Arial",
+          fontSize: "18px",
+          color: "#b91c1c",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private createPlatform(
+    x: number,
+    y: number,
+    scaleX: number
+  ) {
+    this.platforms
+      .create(x, y, "platform")
+      .setScale(scaleX, 1)
+      .refreshBody();
+  }
+
+  private createPlayer() {
+    this.player = this.physics.add.sprite(
+      100,
+      426,
+      "jasmin-idle"
+    );
+
+    this.player.setCollideWorldBounds(true);
+    this.player.setBounce(0.05);
+    this.player.setDepth(5);
+
+    this.physics.add.collider(
+      this.player,
+      this.platforms
+    );
+
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    body.setSize(30, 60);
+    body.setOffset(13, 12);
+  }
+
+  private createQueuePeople() {
+    this.queuePeople =
+      this.physics.add.staticGroup();
+
+    const people = [
+      {
+        x: 980,
+        key: "bun-person-green",
+        id: "queue-1",
+        message: "Someone ordered twelve sandwiches.",
+      },
+      {
+        x: 1270,
+        key: "bun-person-blue",
+        id: "queue-2",
+        message: "The queue moved backwards somehow.",
+      },
+      {
+        x: 1510,
+        key: "bun-person-green",
+        id: "queue-3",
+        message: "Exact change is being counted.",
+      },
+      {
+        x: 1810,
+        key: "bun-person-blue",
+        id: "queue-4",
+        message: "A menu decision takes forever.",
+      },
+    ];
+
+    people.forEach((item) => {
+      const person = this.queuePeople
+        .create(
+          item.x,
+          447,
+          item.key
+        )
+        .setDepth(4);
+
+      person.setData(
+        "personId",
+        item.id
+      );
+
+      person.setData(
+        "message",
+        item.message
+      );
+    });
+
+    this.physics.add.overlap(
+      this.player,
+      this.queuePeople,
+      this.hitQueuePerson,
+      undefined,
+      this
+    );
+  }
+
+  private hitQueuePerson(
+    _playerObject: ArcadeCollisionObject,
+    personObject: ArcadeCollisionObject
+  ) {
+    if (
+      !this.gameStarted ||
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    const person =
+      personObject as Phaser.Physics.Arcade.Image;
+
+    const personId =
+      person.getData("personId") as string;
+
+    const message =
+      person.getData("message") as string;
+
+    if (
+      this.triggeredPeople.has(personId)
+    ) {
+      return;
+    }
+
+    this.triggeredPeople.add(personId);
+
+    person.disableBody(false, false);
+    person.setAlpha(0.45);
+
+    this.addUrgency(4);
+
+    this.player.setVelocityX(-285);
+    this.player.setVelocityY(-165);
+
+    this.cameras.main.shake(
+      190,
+      0.007
+    );
+
+    this.showMessage(
+      message,
+      "+4% TOILET URGENCY",
+      0xb45309
+    );
+  }
+
+  private createObstacles() {
+    this.bunObstacles =
+      this.physics.add.staticGroup();
+
+    const obstacles = [
+      {
+        x: 1130,
+        y: 458,
+        key: "bun-juice",
+        id: "juice",
+        label: "SPILLED JUICE",
+        message: "Sticky floor. Perfect.",
+      },
+      {
+        x: 2020,
+        y: 450,
+        key: "bun-tray",
+        id: "tray",
+        label: "TRAY",
+        message: "The tray escaped the cafeteria.",
+      },
+      {
+        x: 2540,
+        y: 446,
+        key: "bun-chair",
+        id: "chair",
+        label: "CHAIR",
+        message: "A chair has entered the hallway.",
+      },
+    ];
+
+    obstacles.forEach((item) => {
+      const obstacle =
+        this.bunObstacles
+          .create(
+            item.x,
+            item.y,
+            item.key
+          )
+          .setDepth(4);
+
+      obstacle.setData(
+        "obstacleId",
+        item.id
+      );
+
+      obstacle.setData(
+        "message",
+        item.message
+      );
+
+      this.add
+        .text(
+          item.x,
+          item.y - 63,
+          item.label,
+          {
+            fontFamily: "Arial",
+            fontSize: "14px",
+            color: "#7c2d12",
+            fontStyle: "bold",
+          }
+        )
+        .setOrigin(0.5);
+    });
+
+    this.physics.add.overlap(
+      this.player,
+      this.bunObstacles,
+      this.hitObstacle,
+      undefined,
+      this
+    );
+  }
+
+  private hitObstacle(
+    _playerObject: ArcadeCollisionObject,
+    obstacleObject: ArcadeCollisionObject
+  ) {
+    if (
+      !this.gameStarted ||
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    const obstacle =
+      obstacleObject as Phaser.Physics.Arcade.Image;
+
+    const obstacleId =
+      obstacle.getData("obstacleId") as string;
+
+    const message =
+      obstacle.getData("message") as string;
+
+    if (
+      this.triggeredObstacles.has(obstacleId)
+    ) {
+      return;
+    }
+
+    this.triggeredObstacles.add(obstacleId);
+
+    obstacle.disableBody(false, false);
+    obstacle.setAlpha(0.45);
+
+    this.addUrgency(5);
+
+    this.player.setVelocityX(-300);
+    this.player.setVelocityY(-170);
+
+    this.cameras.main.shake(
+      220,
+      0.008
+    );
+
+    this.cameras.main.flash(
+      120,
+      255,
+      80,
+      80
+    );
+
+    this.showMessage(
+      message,
+      "+5% TOILET URGENCY",
+      0xb91c1c
+    );
+  }
+
+  private createBun() {
+    this.bun =
+      this.physics.add.staticImage(
+        2280,
+        432,
+        "golden-bun"
+      );
+
+    this.bun.setDepth(4);
+
+    this.physics.add.overlap(
+      this.player,
+      this.bun,
+      this.collectBun,
+      undefined,
+      this
+    );
+
+    this.add
+      .text(
+        2280,
+        370,
+        "THE BUN",
+        {
+          fontFamily: "Arial",
+          fontSize: "19px",
+          color: "#9a3412",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+
+    this.tweens.add({
+      targets: this.bun,
+      y: 420,
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.InOut",
+    });
+  }
+
+  private collectBun(
+    _playerObject: ArcadeCollisionObject,
+    bunObject: ArcadeCollisionObject
+  ) {
+    if (
+      this.bunCollected ||
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    const bun =
+      bunObject as Phaser.Physics.Arcade.Image;
+
+    this.bunCollected = true;
+
+    this.tweens.killTweensOf(bun);
+    bun.disableBody(true, true);
+
+    this.objectiveText.setText(
+      "OBJECTIVE: LEAVE THE SCHOOL"
+    );
+
+    this.urgency = Math.max(
+      0,
+      this.urgency - 15
+    );
+
+    this.updateUrgencyDisplay();
+
+    this.currentMoveSpeed =
+      this.bunMoveSpeed;
+
+    this.currentJumpVelocity =
+      this.bunJumpVelocity;
+
+    this.player.clearTint();
+    this.player.setTint(0xffd166);
+    this.player.setScale(1.08);
+
+    this.cameras.main.flash(
+      300,
+      255,
+      220,
+      120
+    );
+
+    this.cameras.main.shake(
+      220,
+      0.005
+    );
+
+    const title = this.add
+      .text(
+        480,
+        150,
+        "BUN TRANSFORMATION!",
+        {
+          fontFamily: "Arial",
+          fontSize: "32px",
+          color: "#7c2d12",
+          backgroundColor: "#fde68a",
+          fontStyle: "bold",
+          padding: {
+            x: 18,
+            y: 10,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    const subtitle = this.add
+      .text(
+        480,
+        205,
+        "Normal Jasmin restored. -15% urgency.",
+        {
+          fontFamily: "Arial",
+          fontSize: "19px",
+          color: "#1f2937",
+          backgroundColor: "#ffffff",
+          fontStyle: "bold",
+          padding: {
+            x: 12,
+            y: 7,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    this.time.delayedCall(1900, () => {
+      title.destroy();
+      subtitle.destroy();
+    });
+  }
+
+  private createSchoolExit() {
+    this.schoolExit =
+      this.physics.add.staticImage(
+        3060,
+        416,
+        "bun-exit-door"
+      );
+
+    this.schoolExit.setDepth(4);
+
+    this.physics.add.overlap(
+      this.player,
+      this.schoolExit,
+      this.reachExit,
+      undefined,
+      this
+    );
+
+    this.add
+      .text(
+        3060,
+        300,
+        "GO HOME",
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#166534",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5);
+  }
+
+  private reachExit() {
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    if (!this.bunCollected) {
+      if (this.exitWarningActive) {
+        return;
+      }
+
+      this.exitWarningActive = true;
+
+      this.showMessage(
+        "No bun, no departure!",
+        "Go back and find the bun.",
+        0xdc2626
+      );
+
+      this.time.delayedCall(1500, () => {
+        this.exitWarningActive = false;
+      });
+
+      return;
+    }
+
+    this.completeLevel();
+  }
+
+  private completeLevel() {
+    this.levelComplete = true;
+
+    this.objectiveText.setText(
+      "LEVEL 4 COMPLETE"
+    );
+
+    this.player.setVelocity(0, 0);
+    this.physics.pause();
+
+    this.cameras.main.flash(
+      400,
+      255,
+      255,
+      255
+    );
+
+    this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.91
+      )
+      .setScrollFactor(0)
+      .setDepth(50);
+
+    this.add
+      .text(
+        480,
+        140,
+        "LEVEL 4 COMPLETE",
+        {
+          fontFamily: "Arial",
+          fontSize: "49px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        220,
+        "Jasmin ate the bun and left school.",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        275,
+        `Urgency: ${Math.floor(
+          this.urgency
+        )}%`,
+        {
+          fontFamily: "Arial",
+          fontSize: "21px",
+          color: "#fca5a5",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        335,
+        "NEXT STOP: THE TRAIN HOME",
+        {
+          fontFamily: "Arial",
+          fontSize: "28px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        405,
+        "The journey home continues next.",
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#cbd5e1",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        455,
+        "Press R to replay the bun level",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+  }
+
+  private createControls() {
+    this.cursors =
+      this.input.keyboard!.createCursorKeys();
+
+    this.wasd = {
+      left: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.A
+      ),
+      right: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.D
+      ),
+      up: this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.W
+      ),
+    };
+
+    this.restartKey =
+      this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.R
+      );
+
+    this.enterKey =
+      this.input.keyboard!.addKey(
+        Phaser.Input.Keyboard.KeyCodes.ENTER
+      );
+  }
+
+  private createHud() {
+    this.add
+      .rectangle(
+        480,
+        48,
+        960,
+        96,
+        0x0f172a,
+        0.9
+      )
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.add
+      .text(20, 16, "JASMINITY", {
+        fontFamily: "Arial",
+        fontSize: "26px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.add
+      .text(
+        20,
+        61,
+        "A / D or arrows · Space / W / Up to jump",
+        {
+          fontFamily: "Arial",
+          fontSize: "14px",
+          color: "#cbd5e1",
+        }
+      )
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.objectiveText = this.add
+      .text(
+        250,
+        24,
+        "OBJECTIVE: FIND THE BUN",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(22);
+
+    this.add
+      .rectangle(
+        710,
+        62,
+        310,
+        34,
+        0x111827
+      )
+      .setStrokeStyle(3, 0xffffff)
+      .setScrollFactor(0)
+      .setDepth(20);
+
+    this.urgencyBar = this.add
+      .rectangle(
+        560,
+        62,
+        0,
+        24,
+        0x22c55e
+      )
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(21);
+
+    this.urgencyText = this.add
+      .text(
+        710,
+        62,
+        "TOILET URGENCY: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "16px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(22);
+
+    this.updateUrgencyDisplay();
+  }
+
+  private updatePlayerMovement() {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const movingLeft =
+      this.cursors.left.isDown ||
+      this.wasd.left.isDown;
+
+    const movingRight =
+      this.cursors.right.isDown ||
+      this.wasd.right.isDown;
+
+    if (movingLeft) {
+      this.player.setVelocityX(
+        -this.currentMoveSpeed
+      );
+
+      this.player.setFlipX(true);
+    } else if (movingRight) {
+      this.player.setVelocityX(
+        this.currentMoveSpeed
+      );
+
+      this.player.setFlipX(false);
+    } else {
+      this.player.setVelocityX(0);
+    }
+
+    const wantsToJump =
+      this.cursors.up.isDown ||
+      this.cursors.space.isDown ||
+      this.wasd.up.isDown;
+
+    if (
+      wantsToJump &&
+      body.blocked.down
+    ) {
+      this.player.setVelocityY(
+        this.currentJumpVelocity
+      );
+    }
+  }
+
+  private updatePlayerAppearance(time: number) {
+    const body =
+      this.player.body as Phaser.Physics.Arcade.Body;
+
+    const isGrounded =
+      body.blocked.down ||
+      body.touching.down;
+
+    if (!isGrounded) {
+      this.setPlayerTexture(
+        "jasmin-jump"
+      );
+
+      return;
+    }
+
+    if (
+      Math.abs(body.velocity.x) > 10
+    ) {
+      if (
+        time -
+          this.lastWalkFrameSwitch >
+        140
+      ) {
+        this.walkFrame =
+          this.walkFrame === 0
+            ? 1
+            : 0;
+
+        this.lastWalkFrameSwitch =
+          time;
+      }
+
+      this.setPlayerTexture(
+        this.walkFrame === 0
+          ? "jasmin-walk-1"
+          : "jasmin-walk-2"
+      );
+
+      return;
+    }
+
+    this.walkFrame = 0;
+
+    this.setPlayerTexture(
+      "jasmin-idle"
+    );
+  }
+
+  private setPlayerTexture(
+    textureKey: string
+  ) {
+    if (
+      this.currentPlayerTexture ===
+      textureKey
+    ) {
+      return;
+    }
+
+    this.currentPlayerTexture =
+      textureKey;
+
+    this.player.setTexture(
+      textureKey
+    );
+  }
+
+  private updateUrgency(delta: number) {
+    this.urgency +=
+      this.urgencySpeed *
+      (delta / 1000);
+
+    if (
+      this.urgency >=
+      this.urgencyMax
+    ) {
+      this.urgency =
+        this.urgencyMax;
+
+      this.updateUrgencyDisplay();
+      this.showGameOver();
+
+      return;
+    }
+
+    this.updateUrgencyDisplay();
+  }
+
+  private addUrgency(amount: number) {
+    this.urgency = Math.min(
+      this.urgencyMax,
+      this.urgency + amount
+    );
+
+    this.updateUrgencyDisplay();
+
+    if (
+      this.urgency >=
+      this.urgencyMax
+    ) {
+      this.showGameOver();
+    }
+  }
+
+  private updateUrgencyDisplay() {
+    const percentage =
+      this.urgency /
+      this.urgencyMax;
+
+    this.urgencyBar.width =
+      300 * percentage;
+
+    this.urgencyText.setText(
+      `TOILET URGENCY: ${Math.floor(
+        this.urgency
+      )}%`
+    );
+
+    if (percentage < 0.5) {
+      this.urgencyBar.setFillStyle(
+        0x22c55e
+      );
+    } else if (percentage < 0.8) {
+      this.urgencyBar.setFillStyle(
+        0xf59e0b
+      );
+    } else {
+      this.urgencyBar.setFillStyle(
+        0xef4444
+      );
+    }
+  }
+
+  private showMessage(
+    title: string,
+    subtitle: string,
+    backgroundColor: number
+  ) {
+    const titleText = this.add
+      .text(
+        480,
+        155,
+        title,
+        {
+          fontFamily: "Arial",
+          fontSize: "27px",
+          color: "#ffffff",
+          backgroundColor:
+            `#${backgroundColor
+              .toString(16)
+              .padStart(6, "0")}`,
+          fontStyle: "bold",
+          padding: {
+            x: 18,
+            y: 10,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    const subtitleText = this.add
+      .text(
+        480,
+        210,
+        subtitle,
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#1f2937",
+          backgroundColor: "#ffffff",
+          fontStyle: "bold",
+          padding: {
+            x: 14,
+            y: 8,
+          },
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(40);
+
+    this.time.delayedCall(1500, () => {
+      titleText.destroy();
+      subtitleText.destroy();
+    });
+  }
+
+  private showGameOver() {
+    if (
+      this.gameOver ||
+      this.levelComplete
+    ) {
+      return;
+    }
+
+    this.gameOver = true;
+
+    this.objectiveText.setText(
+      "OBJECTIVE FAILED"
+    );
+
+    this.player.setVelocity(0, 0);
+    this.physics.pause();
+
+    this.add
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x111827,
+        0.84
+      )
+      .setScrollFactor(0)
+      .setDepth(50);
+
+    this.add
+      .text(
+        480,
+        210,
+        "TOO LATE!",
+        {
+          fontFamily: "Arial",
+          fontSize: "58px",
+          color: "#ff6b6b",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        285,
+        "The bun remained uneaten.",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#ffffff",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+
+    this.add
+      .text(
+        480,
+        350,
+        "Press R to restart the bun level",
+        {
+          fontFamily: "Arial",
+          fontSize: "22px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(51);
+  }
+
+  private createBunTextures() {
+    this.createPersonTexture(
+      "bun-person-green",
+      0x16a34a,
+      0xf4bd94
+    );
+
+    this.createPersonTexture(
+      "bun-person-blue",
+      0x2563eb,
+      0x9a6546
+    );
+
+    this.createGoldenBunTexture();
+    this.createJuiceTexture();
+    this.createTrayTexture();
+    this.createChairTexture();
+    this.createExitDoorTexture();
+  }
+
+  private createPersonTexture(
+    textureKey: string,
+    shirtColor: number,
+    skinColor: number
+  ) {
+    if (
+      this.textures.exists(textureKey)
+    ) {
+      this.textures.remove(textureKey);
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(skinColor);
+    graphics.fillCircle(24, 14, 10);
+
+    graphics.fillStyle(0x1f2937);
+    graphics.fillRoundedRect(
+      15,
+      4,
+      18,
+      7,
+      4
+    );
+
+    graphics.fillStyle(shirtColor);
+    graphics.fillRoundedRect(
+      12,
+      25,
+      24,
+      32,
+      6
+    );
+
+    graphics.lineStyle(
+      5,
+      skinColor
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(14, 30);
+    graphics.lineTo(5, 46);
+    graphics.moveTo(34, 30);
+    graphics.lineTo(43, 46);
+    graphics.strokePath();
+
+    graphics.lineStyle(
+      6,
+      0x1f2937
+    );
+
+    graphics.beginPath();
+    graphics.moveTo(18, 55);
+    graphics.lineTo(15, 74);
+    graphics.moveTo(30, 55);
+    graphics.lineTo(33, 74);
+    graphics.strokePath();
+
+    graphics.generateTexture(
+      textureKey,
+      48,
+      78
+    );
+
+    graphics.destroy();
+  }
+
+  private createGoldenBunTexture() {
+    if (
+      this.textures.exists(
+        "golden-bun"
+      )
+    ) {
+      this.textures.remove(
+        "golden-bun"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0xf59e0b);
+    graphics.fillEllipse(
+      38,
+      28,
+      68,
+      44
+    );
+
+    graphics.lineStyle(
+      4,
+      0x92400e
+    );
+
+    graphics.strokeEllipse(
+      38,
+      28,
+      68,
+      44
+    );
+
+    graphics.lineStyle(
+      3,
+      0xfde68a
+    );
+
+    graphics.beginPath();
+    graphics.arc(
+      25,
+      25,
+      9,
+      3.5,
+      5.8
+    );
+    graphics.strokePath();
+
+    graphics.beginPath();
+    graphics.arc(
+      43,
+      22,
+      9,
+      3.5,
+      5.8
+    );
+    graphics.strokePath();
+
+    graphics.fillStyle(0xffffff);
+    graphics.fillCircle(26, 25, 3);
+    graphics.fillCircle(48, 25, 3);
+
+    graphics.fillStyle(0x111827);
+    graphics.fillCircle(26, 25, 1.5);
+    graphics.fillCircle(48, 25, 1.5);
+
+    graphics.lineStyle(
+      2,
+      0x7c2d12
+    );
+
+    graphics.beginPath();
+    graphics.arc(
+      37,
+      31,
+      8,
+      0.2,
+      2.9
+    );
+    graphics.strokePath();
+
+    graphics.generateTexture(
+      "golden-bun",
+      76,
+      56
+    );
+
+    graphics.destroy();
+  }
+
+  private createJuiceTexture() {
+    if (
+      this.textures.exists(
+        "bun-juice"
+      )
+    ) {
+      this.textures.remove(
+        "bun-juice"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(
+      0xf97316,
+      0.75
+    );
+
+    graphics.fillEllipse(
+      35,
+      22,
+      66,
+      28
+    );
+
+    graphics.fillCircle(
+      12,
+      16,
+      8
+    );
+
+    graphics.fillCircle(
+      55,
+      18,
+      10
+    );
+
+    graphics.generateTexture(
+      "bun-juice",
+      72,
+      40
+    );
+
+    graphics.destroy();
+  }
+
+  private createTrayTexture() {
+    if (
+      this.textures.exists(
+        "bun-tray"
+      )
+    ) {
+      this.textures.remove(
+        "bun-tray"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0x64748b);
+    graphics.fillRoundedRect(
+      3,
+      10,
+      72,
+      26,
+      6
+    );
+
+    graphics.lineStyle(
+      4,
+      0x334155
+    );
+
+    graphics.strokeRoundedRect(
+      3,
+      10,
+      72,
+      26,
+      6
+    );
+
+    graphics.fillStyle(0xf8fafc);
+    graphics.fillCircle(
+      25,
+      22,
+      8
+    );
+
+    graphics.fillStyle(0xfacc15);
+    graphics.fillRoundedRect(
+      45,
+      15,
+      20,
+      13,
+      3
+    );
+
+    graphics.generateTexture(
+      "bun-tray",
+      78,
+      46
+    );
+
+    graphics.destroy();
+  }
+
+  private createChairTexture() {
+    if (
+      this.textures.exists(
+        "bun-chair"
+      )
+    ) {
+      this.textures.remove(
+        "bun-chair"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0x92400e);
+    graphics.fillRoundedRect(
+      6,
+      5,
+      54,
+      19,
+      5
+    );
+
+    graphics.fillRect(
+      10,
+      21,
+      9,
+      49
+    );
+
+    graphics.fillRect(
+      48,
+      21,
+      9,
+      49
+    );
+
+    graphics.fillRect(
+      7,
+      2,
+      9,
+      43
+    );
+
+    graphics.generateTexture(
+      "bun-chair",
+      68,
+      74
+    );
+
+    graphics.destroy();
+  }
+
+  private createExitDoorTexture() {
+    if (
+      this.textures.exists(
+        "bun-exit-door"
+      )
+    ) {
+      this.textures.remove(
+        "bun-exit-door"
+      );
+    }
+
+    const graphics =
+      this.add.graphics();
+
+    graphics.fillStyle(0x78350f);
+    graphics.fillRoundedRect(
+      4,
+      2,
+      72,
+      116,
+      6
+    );
+
+    graphics.fillStyle(0xb45309);
+    graphics.fillRoundedRect(
+      11,
+      9,
+      58,
+      102,
+      4
+    );
+
+    graphics.lineStyle(
+      4,
+      0x5b2c0a
+    );
+
+    graphics.strokeRoundedRect(
+      11,
+      9,
+      58,
+      102,
+      4
+    );
+
+    graphics.fillStyle(0xfacc15);
+    graphics.fillCircle(
+      58,
+      62,
+      5
+    );
+
+    graphics.fillStyle(0xfef3c7);
+    graphics.fillRoundedRect(
+      18,
+      18,
+      44,
+      28,
+      4
+    );
+
+    graphics.fillStyle(0x166534);
+    graphics.fillTriangle(
+      28,
+      27,
+      28,
+      38,
+      42,
+      32
+    );
+
+    graphics.fillRect(
+      41,
+      30,
+      11,
+      5
+    );
+
+    graphics.generateTexture(
+      "bun-exit-door",
+      80,
+      120
+    );
+
+    graphics.destroy();
+  }
+}
+
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: 960,
@@ -6003,6 +8090,7 @@ const config: Phaser.Types.Core.GameConfig = {
     ApartmentScene,
     MetroScene,
     SchoolScene,
+    BunScene,
   ],
 };
 
