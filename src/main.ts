@@ -35,12 +35,14 @@ class GameScene extends Phaser.Scene {
 
   private urgencyBar!: Phaser.GameObjects.Rectangle;
   private urgencyText!: Phaser.GameObjects.Text;
+  private objectiveText!: Phaser.GameObjects.Text;
 
   private gameStarted = false;
   private gameOver = false;
   private gameWon = false;
-  private coffeeMode = false;
   private alarmDisabled = false;
+  private coffeeCollected = false;
+  private toiletWarningActive = false;
 
   private readonly gameHeight = 540;
   private readonly worldWidth = 3200;
@@ -73,8 +75,9 @@ class GameScene extends Phaser.Scene {
     this.gameStarted = false;
     this.gameOver = false;
     this.gameWon = false;
-    this.coffeeMode = false;
     this.alarmDisabled = false;
+    this.coffeeCollected = false;
+    this.toiletWarningActive = false;
 
     this.createPlayerTexture();
     this.createPlatformTexture();
@@ -219,14 +222,6 @@ class GameScene extends Phaser.Scene {
       keyboardText,
     ];
 
-    const begin = () => {
-      if (this.gameStarted) {
-        return;
-      }
-
-      this.startGame();
-    };
-
     startButton.on("pointerover", () => {
       startButton.setFillStyle(0x16a34a);
       startButton.setScale(1.04);
@@ -237,7 +232,9 @@ class GameScene extends Phaser.Scene {
       startButton.setScale(1);
     });
 
-    startButton.on("pointerdown", begin);
+    startButton.on("pointerdown", () => {
+      this.startGame();
+    });
 
     this.events.once("start-game", () => {
       startObjects.forEach((gameObject) => {
@@ -255,6 +252,10 @@ class GameScene extends Phaser.Scene {
 
     this.gameStarted = true;
     this.events.emit("start-game");
+
+    this.objectiveText.setText(
+      "OBJECTIVE: TURN OFF THE ALARM"
+    );
 
     this.cameras.main.flash(250, 255, 255, 255);
 
@@ -327,7 +328,14 @@ class GameScene extends Phaser.Scene {
 
     for (let x = 0; x < this.worldWidth; x += 160) {
       this.add
-        .rectangle(x + 80, 460, 3, 100, 0xb8a98d, 0.45)
+        .rectangle(
+          x + 80,
+          460,
+          3,
+          100,
+          0xb8a98d,
+          0.45
+        )
         .setDepth(-8);
     }
   }
@@ -555,13 +563,20 @@ class GameScene extends Phaser.Scene {
   }
 
   private createPlayer() {
-    this.player = this.physics.add.sprite(100, 440, "jasmin");
+    this.player = this.physics.add.sprite(
+      100,
+      440,
+      "jasmin"
+    );
 
     this.player.setCollideWorldBounds(true);
     this.player.setBounce(0.05);
     this.player.setDepth(5);
 
-    this.physics.add.collider(this.player, this.platforms);
+    this.physics.add.collider(
+      this.player,
+      this.platforms
+    );
   }
 
   private createAlarmClock() {
@@ -618,6 +633,10 @@ class GameScene extends Phaser.Scene {
       alarmObject as Phaser.Physics.Arcade.Image;
 
     this.alarmDisabled = true;
+
+    this.objectiveText.setText(
+      "OBJECTIVE: DRINK THE COFFEE"
+    );
 
     this.tweens.killTweensOf(alarmClock);
 
@@ -718,7 +737,8 @@ class GameScene extends Phaser.Scene {
   }
 
   private createControls() {
-    this.cursors = this.input.keyboard!.createCursorKeys();
+    this.cursors =
+      this.input.keyboard!.createCursorKeys();
 
     this.wasd = {
       left: this.input.keyboard!.addKey(
@@ -745,14 +765,14 @@ class GameScene extends Phaser.Scene {
 
   private createHud() {
     this.add
-      .rectangle(480, 48, 960, 96, 0x0f172a, 0.86)
+      .rectangle(480, 48, 960, 96, 0x0f172a, 0.9)
       .setScrollFactor(0)
       .setDepth(20);
 
     this.add
-      .text(20, 18, "JASMINITY", {
+      .text(20, 16, "JASMINITY", {
         fontFamily: "Arial",
-        fontSize: "27px",
+        fontSize: "26px",
         color: "#ffffff",
         fontStyle: "bold",
       })
@@ -762,16 +782,32 @@ class GameScene extends Phaser.Scene {
     this.add
       .text(
         20,
-        60,
+        61,
         "A / D or arrows · Space / W / Up to jump",
         {
           fontFamily: "Arial",
-          fontSize: "15px",
+          fontSize: "14px",
           color: "#cbd5e1",
         }
       )
       .setScrollFactor(0)
       .setDepth(21);
+
+    this.objectiveText = this.add
+      .text(
+        250,
+        24,
+        "OBJECTIVE: TURN OFF THE ALARM",
+        {
+          fontFamily: "Arial",
+          fontSize: "17px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(22);
 
     this.createUrgencyBar();
   }
@@ -781,16 +817,24 @@ class GameScene extends Phaser.Scene {
       this.player.body as Phaser.Physics.Arcade.Body;
 
     const movingLeft =
-      this.cursors.left.isDown || this.wasd.left.isDown;
+      this.cursors.left.isDown ||
+      this.wasd.left.isDown;
 
     const movingRight =
-      this.cursors.right.isDown || this.wasd.right.isDown;
+      this.cursors.right.isDown ||
+      this.wasd.right.isDown;
 
     if (movingLeft) {
-      this.player.setVelocityX(-this.currentMoveSpeed);
+      this.player.setVelocityX(
+        -this.currentMoveSpeed
+      );
+
       this.player.setFlipX(true);
     } else if (movingRight) {
-      this.player.setVelocityX(this.currentMoveSpeed);
+      this.player.setVelocityX(
+        this.currentMoveSpeed
+      );
+
       this.player.setFlipX(false);
     } else {
       this.player.setVelocityX(0);
@@ -807,7 +851,8 @@ class GameScene extends Phaser.Scene {
   }
 
   private updateUrgency(delta: number) {
-    this.urgency += this.urgencySpeed * (delta / 1000);
+    this.urgency +=
+      this.urgencySpeed * (delta / 1000);
 
     if (this.urgency >= this.urgencyMax) {
       this.urgency = this.urgencyMax;
@@ -822,12 +867,15 @@ class GameScene extends Phaser.Scene {
   }
 
   private updateUrgencyDisplay() {
-    const percentage = this.urgency / this.urgencyMax;
+    const percentage =
+      this.urgency / this.urgencyMax;
 
     this.urgencyBar.width = 300 * percentage;
 
     this.urgencyText.setText(
-      `TOILET URGENCY: ${Math.floor(this.urgency)}%`
+      `TOILET URGENCY: ${Math.floor(
+        this.urgency
+      )}%`
     );
 
     if (percentage < 0.5) {
@@ -844,7 +892,7 @@ class GameScene extends Phaser.Scene {
     coffeeObject: ArcadeCollisionObject
   ) {
     if (
-      this.coffeeMode ||
+      this.coffeeCollected ||
       this.gameOver ||
       this.gameWon
     ) {
@@ -853,32 +901,42 @@ class GameScene extends Phaser.Scene {
 
     if (!this.alarmDisabled) {
       const alarmFirstText = this.add
-        .text(480, 165, "The alarm is still ringing!", {
-          fontFamily: "Arial",
-          fontSize: "28px",
-          color: "#ffffff",
-          backgroundColor: "#dc2626",
-          fontStyle: "bold",
-          padding: {
-            x: 18,
-            y: 10,
-          },
-        })
+        .text(
+          480,
+          165,
+          "The alarm is still ringing!",
+          {
+            fontFamily: "Arial",
+            fontSize: "28px",
+            color: "#ffffff",
+            backgroundColor: "#dc2626",
+            fontStyle: "bold",
+            padding: {
+              x: 18,
+              y: 10,
+            },
+          }
+        )
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(30);
 
       const goBackText = this.add
-        .text(480, 220, "Go back and turn it off.", {
-          fontFamily: "Arial",
-          fontSize: "19px",
-          color: "#1f2937",
-          backgroundColor: "#ffffff",
-          padding: {
-            x: 14,
-            y: 8,
-          },
-        })
+        .text(
+          480,
+          220,
+          "Go back and turn it off.",
+          {
+            fontFamily: "Arial",
+            fontSize: "19px",
+            color: "#1f2937",
+            backgroundColor: "#ffffff",
+            padding: {
+              x: 14,
+              y: 8,
+            },
+          }
+        )
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(30);
@@ -898,8 +956,15 @@ class GameScene extends Phaser.Scene {
 
     coffee.disableBody(true, true);
 
-    this.coffeeMode = true;
-    this.currentMoveSpeed = this.coffeeMoveSpeed;
+    this.coffeeCollected = true;
+
+    this.objectiveText.setText(
+      "OBJECTIVE: REACH THE TOILET"
+    );
+
+    this.currentMoveSpeed =
+      this.coffeeMoveSpeed;
+
     this.urgencySpeed = 11;
 
     this.player.setTint(0xff7a00);
@@ -922,16 +987,21 @@ class GameScene extends Phaser.Scene {
       .setDepth(30);
 
     const warningText = this.add
-      .text(480, 205, "Faster Jasmin. Faster urgency.", {
-        fontFamily: "Arial",
-        fontSize: "19px",
-        color: "#1f2937",
-        backgroundColor: "#ffffff",
-        padding: {
-          x: 12,
-          y: 6,
-        },
-      })
+      .text(
+        480,
+        205,
+        "Faster Jasmin. Faster urgency.",
+        {
+          fontFamily: "Arial",
+          fontSize: "19px",
+          color: "#1f2937",
+          backgroundColor: "#ffffff",
+          padding: {
+            x: 12,
+            y: 6,
+          },
+        }
+      )
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(30);
@@ -943,8 +1013,9 @@ class GameScene extends Phaser.Scene {
         return;
       }
 
-      this.coffeeMode = false;
-      this.currentMoveSpeed = this.normalMoveSpeed;
+      this.currentMoveSpeed =
+        this.normalMoveSpeed;
+
       this.urgencySpeed = 4;
 
       this.player.clearTint();
@@ -954,16 +1025,21 @@ class GameScene extends Phaser.Scene {
       warningText.destroy();
 
       const finishedText = this.add
-        .text(480, 155, "Coffee mode finished.", {
-          fontFamily: "Arial",
-          fontSize: "22px",
-          color: "#ffffff",
-          backgroundColor: "#1f2937",
-          padding: {
-            x: 14,
-            y: 8,
-          },
-        })
+        .text(
+          480,
+          155,
+          "Coffee mode finished.",
+          {
+            fontFamily: "Arial",
+            fontSize: "22px",
+            color: "#ffffff",
+            backgroundColor: "#1f2937",
+            padding: {
+              x: 14,
+              y: 8,
+            },
+          }
+        )
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(30);
@@ -979,59 +1055,154 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
+    if (!this.coffeeCollected) {
+      if (this.toiletWarningActive) {
+        return;
+      }
+
+      this.toiletWarningActive = true;
+
+      const coffeeFirstText = this.add
+        .text(
+          480,
+          165,
+          "You forgot the coffee!",
+          {
+            fontFamily: "Arial",
+            fontSize: "30px",
+            color: "#ffffff",
+            backgroundColor: "#dc2626",
+            fontStyle: "bold",
+            padding: {
+              x: 18,
+              y: 10,
+            },
+          }
+        )
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(30);
+
+      const returnText = this.add
+        .text(
+          480,
+          220,
+          "Go back to the coffee table.",
+          {
+            fontFamily: "Arial",
+            fontSize: "19px",
+            color: "#1f2937",
+            backgroundColor: "#ffffff",
+            padding: {
+              x: 14,
+              y: 8,
+            },
+          }
+        )
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(30);
+
+      this.cameras.main.shake(180, 0.004);
+
+      this.time.delayedCall(1500, () => {
+        coffeeFirstText.destroy();
+        returnText.destroy();
+        this.toiletWarningActive = false;
+      });
+
+      return;
+    }
+
     this.gameWon = true;
     this.urgency = 0;
+
+    this.objectiveText.setText(
+      "OBJECTIVE COMPLETE"
+    );
 
     this.updateUrgencyDisplay();
 
     this.player.setVelocity(0, 0);
     this.physics.pause();
 
-    this.cameras.main.flash(400, 255, 255, 255);
+    this.cameras.main.flash(
+      400,
+      255,
+      255,
+      255
+    );
 
     this.add
-      .rectangle(480, 270, 960, 540, 0x0f172a, 0.88)
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x0f172a,
+        0.88
+      )
       .setScrollFactor(0)
       .setDepth(50);
 
     this.add
-      .text(480, 185, "MISSION COMPLETE", {
-        fontFamily: "Arial",
-        fontSize: "54px",
-        color: "#86efac",
-        fontStyle: "bold",
-      })
+      .text(
+        480,
+        185,
+        "MISSION COMPLETE",
+        {
+          fontFamily: "Arial",
+          fontSize: "54px",
+          color: "#86efac",
+          fontStyle: "bold",
+        }
+      )
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
 
     this.add
-      .text(480, 265, "Jasmin reached the toilet.", {
-        fontFamily: "Arial",
-        fontSize: "25px",
-        color: "#ffffff",
-      })
+      .text(
+        480,
+        265,
+        "Jasmin reached the toilet.",
+        {
+          fontFamily: "Arial",
+          fontSize: "25px",
+          color: "#ffffff",
+        }
+      )
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
 
     this.add
-      .text(480, 320, "The urgency is finally zero.", {
-        fontFamily: "Arial",
-        fontSize: "20px",
-        color: "#cbd5e1",
-      })
+      .text(
+        480,
+        320,
+        "The urgency is finally zero.",
+        {
+          fontFamily: "Arial",
+          fontSize: "20px",
+          color: "#cbd5e1",
+        }
+      )
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
 
     this.add
-      .text(480, 390, "Press R to play again", {
-        fontFamily: "Arial",
-        fontSize: "22px",
-        color: "#facc15",
-        fontStyle: "bold",
-      })
+      .text(
+        480,
+        390,
+        "Press R to play again",
+        {
+          fontFamily: "Arial",
+          fontSize: "22px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
@@ -1039,24 +1210,41 @@ class GameScene extends Phaser.Scene {
 
   private createUrgencyBar() {
     this.add
-      .rectangle(710, 48, 310, 34, 0x111827)
+      .rectangle(
+        710,
+        62,
+        310,
+        34,
+        0x111827
+      )
       .setStrokeStyle(3, 0xffffff)
       .setScrollFactor(0)
       .setDepth(20);
 
     this.urgencyBar = this.add
-      .rectangle(560, 48, 0, 24, 0x22c55e)
+      .rectangle(
+        560,
+        62,
+        0,
+        24,
+        0x22c55e
+      )
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(21);
 
     this.urgencyText = this.add
-      .text(710, 48, "TOILET URGENCY: 0%", {
-        fontFamily: "Arial",
-        fontSize: "16px",
-        color: "#ffffff",
-        fontStyle: "bold",
-      })
+      .text(
+        710,
+        62,
+        "TOILET URGENCY: 0%",
+        {
+          fontFamily: "Arial",
+          fontSize: "16px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        }
+      )
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(22);
@@ -1065,11 +1253,22 @@ class GameScene extends Phaser.Scene {
   private showGameOver() {
     this.gameOver = true;
 
+    this.objectiveText.setText(
+      "OBJECTIVE FAILED"
+    );
+
     this.player.setVelocity(0, 0);
     this.physics.pause();
 
     this.add
-      .rectangle(480, 270, 960, 540, 0x111827, 0.82)
+      .rectangle(
+        480,
+        270,
+        960,
+        540,
+        0x111827,
+        0.82
+      )
       .setScrollFactor(0)
       .setDepth(50);
 
@@ -1085,22 +1284,32 @@ class GameScene extends Phaser.Scene {
       .setDepth(51);
 
     this.add
-      .text(480, 290, "Jasminity ran out of patience.", {
-        fontFamily: "Arial",
-        fontSize: "24px",
-        color: "#ffffff",
-      })
+      .text(
+        480,
+        290,
+        "Jasminity ran out of patience.",
+        {
+          fontFamily: "Arial",
+          fontSize: "24px",
+          color: "#ffffff",
+        }
+      )
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
 
     this.add
-      .text(480, 350, "Press R to restart", {
-        fontFamily: "Arial",
-        fontSize: "22px",
-        color: "#facc15",
-        fontStyle: "bold",
-      })
+      .text(
+        480,
+        350,
+        "Press R to restart",
+        {
+          fontFamily: "Arial",
+          fontSize: "22px",
+          color: "#facc15",
+          fontStyle: "bold",
+        }
+      )
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
@@ -1110,7 +1319,13 @@ class GameScene extends Phaser.Scene {
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0xff69b4);
-    graphics.fillRoundedRect(0, 0, 40, 60, 8);
+    graphics.fillRoundedRect(
+      0,
+      0,
+      40,
+      60,
+      8
+    );
 
     graphics.fillStyle(0xffffff);
     graphics.fillCircle(12, 18, 5);
@@ -1122,7 +1337,12 @@ class GameScene extends Phaser.Scene {
 
     graphics.fillRect(13, 40, 14, 3);
 
-    graphics.generateTexture("jasmin", 40, 60);
+    graphics.generateTexture(
+      "jasmin",
+      40,
+      60
+    );
+
     graphics.destroy();
   }
 
@@ -1130,9 +1350,21 @@ class GameScene extends Phaser.Scene {
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0x4f772d);
-    graphics.fillRoundedRect(0, 0, 40, 30, 6);
 
-    graphics.generateTexture("platform", 40, 30);
+    graphics.fillRoundedRect(
+      0,
+      0,
+      40,
+      30,
+      6
+    );
+
+    graphics.generateTexture(
+      "platform",
+      40,
+      30
+    );
+
     graphics.destroy();
   }
 
@@ -1187,7 +1419,12 @@ class GameScene extends Phaser.Scene {
     graphics.lineTo(40, 49);
     graphics.strokePath();
 
-    graphics.generateTexture("alarm-clock", 50, 52);
+    graphics.generateTexture(
+      "alarm-clock",
+      50,
+      52
+    );
+
     graphics.destroy();
   }
 
@@ -1195,7 +1432,13 @@ class GameScene extends Phaser.Scene {
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0xffffff);
-    graphics.fillRoundedRect(3, 8, 30, 27, 5);
+    graphics.fillRoundedRect(
+      3,
+      8,
+      30,
+      27,
+      5
+    );
 
     graphics.lineStyle(5, 0xffffff);
     graphics.strokeCircle(34, 21, 8);
@@ -1203,7 +1446,12 @@ class GameScene extends Phaser.Scene {
     graphics.fillStyle(0x6f4e37);
     graphics.fillEllipse(18, 10, 25, 7);
 
-    graphics.lineStyle(3, 0xf8fafc, 0.8);
+    graphics.lineStyle(
+      3,
+      0xf8fafc,
+      0.8
+    );
+
     graphics.beginPath();
 
     graphics.moveTo(12, 3);
@@ -1214,7 +1462,12 @@ class GameScene extends Phaser.Scene {
 
     graphics.strokePath();
 
-    graphics.generateTexture("coffee", 45, 42);
+    graphics.generateTexture(
+      "coffee",
+      45,
+      42
+    );
+
     graphics.destroy();
   }
 
@@ -1222,10 +1475,24 @@ class GameScene extends Phaser.Scene {
     const graphics = this.add.graphics();
 
     graphics.fillStyle(0xf8fafc);
-    graphics.fillRoundedRect(7, 0, 38, 34, 7);
+
+    graphics.fillRoundedRect(
+      7,
+      0,
+      38,
+      34,
+      7
+    );
 
     graphics.fillStyle(0xe2e8f0);
-    graphics.fillRoundedRect(3, 28, 46, 22, 8);
+
+    graphics.fillRoundedRect(
+      3,
+      28,
+      46,
+      22,
+      8
+    );
 
     graphics.fillStyle(0xffffff);
     graphics.fillEllipse(26, 40, 40, 20);
@@ -1234,9 +1501,21 @@ class GameScene extends Phaser.Scene {
     graphics.fillEllipse(26, 40, 25, 10);
 
     graphics.fillStyle(0xf8fafc);
-    graphics.fillRoundedRect(16, 46, 22, 24, 5);
 
-    graphics.generateTexture("toilet", 52, 72);
+    graphics.fillRoundedRect(
+      16,
+      46,
+      22,
+      24,
+      5
+    );
+
+    graphics.generateTexture(
+      "toilet",
+      52,
+      72
+    );
+
     graphics.destroy();
   }
 }
