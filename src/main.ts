@@ -145,11 +145,10 @@ function createMobileControls(
 
   const buttonY = 475;
 
-  const makeButton = (
+  const makeDirectionButton = (
     x: number,
     labelText: string,
-    onDown: () => void,
-    onUp: () => void
+    direction: "left" | "right"
   ) => {
     const button = scene.add
       .circle(
@@ -186,57 +185,87 @@ function createMobileControls(
       .setScrollFactor(0)
       .setDepth(201);
 
-    const press = () => {
+    let activePointerId:
+      number | null = null;
+
+    const press = (
+      pointer: Phaser.Input.Pointer
+    ) => {
+      activePointerId = pointer.id;
+      jasminityMobileControls[
+        direction
+      ] = true;
+
       button.setFillStyle(
         0x2563eb,
         0.92
       );
+
       button.setScale(1.08);
       label.setScale(1.08);
-      onDown();
     };
 
-    const release = () => {
+    const release = (
+      pointer?: Phaser.Input.Pointer
+    ) => {
+      if (
+        pointer &&
+        activePointerId !== null &&
+        pointer.id !== activePointerId
+      ) {
+        return;
+      }
+
+      activePointerId = null;
+      jasminityMobileControls[
+        direction
+      ] = false;
+
       button.setFillStyle(
         0x0f172a,
         0.72
       );
+
       button.setScale(1);
       label.setScale(1);
-      onUp();
     };
 
-    button.on("pointerdown", press);
-    button.on("pointerup", release);
-    button.on("pointerout", release);
-    button.on("pointerupoutside", release);
+    button.on(
+      "pointerdown",
+      press
+    );
 
-    return {
-      button,
-      label,
-    };
+    button.on(
+      "pointerup",
+      release
+    );
+
+    scene.input.on(
+      "pointerup",
+      (
+        pointer:
+          Phaser.Input.Pointer
+      ) => {
+        if (
+          pointer.id ===
+          activePointerId
+        ) {
+          release(pointer);
+        }
+      }
+    );
   };
 
-  makeButton(
+  makeDirectionButton(
     70,
     "◀",
-    () => {
-      jasminityMobileControls.left = true;
-    },
-    () => {
-      jasminityMobileControls.left = false;
-    }
+    "left"
   );
 
-  makeButton(
+  makeDirectionButton(
     170,
     "▶",
-    () => {
-      jasminityMobileControls.right = true;
-    },
-    () => {
-      jasminityMobileControls.right = false;
-    }
+    "right"
   );
 
   const jumpButton = scene.add
@@ -274,7 +303,13 @@ function createMobileControls(
     .setScrollFactor(0)
     .setDepth(201);
 
-  const jumpDown = () => {
+  let jumpPointerId:
+    number | null = null;
+
+  const jumpDown = (
+    pointer: Phaser.Input.Pointer
+  ) => {
+    jumpPointerId = pointer.id;
     jasminityMobileControls.jump = true;
 
     jumpButton.setFillStyle(
@@ -286,7 +321,18 @@ function createMobileControls(
     jumpLabel.setScale(1.08);
   };
 
-  const jumpUp = () => {
+  const jumpUp = (
+    pointer?: Phaser.Input.Pointer
+  ) => {
+    if (
+      pointer &&
+      jumpPointerId !== null &&
+      pointer.id !== jumpPointerId
+    ) {
+      return;
+    }
+
+    jumpPointerId = null;
     jasminityMobileControls.jump = false;
 
     jumpButton.setFillStyle(
@@ -308,19 +354,26 @@ function createMobileControls(
     jumpUp
   );
 
-  jumpButton.on(
-    "pointerout",
-    jumpUp
-  );
-
-  jumpButton.on(
-    "pointerupoutside",
-    jumpUp
+  scene.input.on(
+    "pointerup",
+    (
+      pointer:
+        Phaser.Input.Pointer
+    ) => {
+      if (
+        pointer.id ===
+        jumpPointerId
+      ) {
+        jumpUp(pointer);
+      }
+    }
   );
 
   scene.events.once(
     Phaser.Scenes.Events.SHUTDOWN,
-    resetJasminityMobileControls
+    () => {
+      resetJasminityMobileControls();
+    }
   );
 }
 
@@ -16064,6 +16117,12 @@ class FinalApartmentScene extends Phaser.Scene {
 }
 
 const config: Phaser.Types.Core.GameConfig = {
+  input: {
+    activePointers: 4,
+    touch: {
+      capture: true,
+    },
+  },
   type: Phaser.AUTO,
   width: 960,
   height: 540,
