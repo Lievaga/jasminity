@@ -378,6 +378,101 @@ function createMobileControls(
 }
 
 
+
+function createRestartLevelButton(
+  scene: Phaser.Scene
+) {
+  const button = scene.add
+    .rectangle(
+      480,
+      420,
+      330,
+      62,
+      0xdc2626,
+      0.97
+    )
+    .setStrokeStyle(
+      4,
+      0xffffff
+    )
+    .setScrollFactor(0)
+    .setDepth(120)
+    .setInteractive({
+      useHandCursor: true,
+    });
+
+  const label = scene.add
+    .text(
+      480,
+      420,
+      "RESTART LEVEL",
+      {
+        fontFamily: "Arial",
+        fontSize: "24px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      }
+    )
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setDepth(121);
+
+  const hint = scene.add
+    .text(
+      480,
+      468,
+      "Tap to try this level again",
+      {
+        fontFamily: "Arial",
+        fontSize: "16px",
+        color: "#f8fafc",
+      }
+    )
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setDepth(121);
+
+  button.on(
+    "pointerover",
+    () => {
+      button.setFillStyle(
+        0xb91c1c
+      );
+
+      button.setScale(1.04);
+      label.setScale(1.04);
+    }
+  );
+
+  button.on(
+    "pointerout",
+    () => {
+      button.setFillStyle(
+        0xdc2626
+      );
+
+      button.setScale(1);
+      label.setScale(1);
+    }
+  );
+
+  button.on(
+    "pointerdown",
+    () => {
+      resetJasminityMobileControls();
+      scene.sound.stopAll();
+      scene.scene.restart();
+    }
+  );
+
+  return {
+    button,
+    label,
+    hint,
+  };
+}
+
+
 class ApartmentScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -2039,6 +2134,8 @@ class ApartmentScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
+
+    createRestartLevelButton(this);
   }
 
   private createPlayerTextures() {
@@ -4268,6 +4365,8 @@ class MetroScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
+
+    createRestartLevelButton(this);
   }
 
   private createMetroTextures() {
@@ -6104,6 +6203,8 @@ class SchoolScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
+
+    createRestartLevelButton(this);
   }
 
   private createSchoolTextures() {
@@ -8130,6 +8231,8 @@ class BunScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
+
+    createRestartLevelButton(this);
   }
 
   private createBunTextures() {
@@ -10132,6 +10235,8 @@ class TrainHomeScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
+
+    createRestartLevelButton(this);
   }
 
   private createTrainHomeTextures() {
@@ -12086,6 +12191,8 @@ class BicycleScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
+
+    createRestartLevelButton(this);
   }
 
   private createBicycleTextures() {
@@ -13924,6 +14031,8 @@ class StairsScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
+
+    createRestartLevelButton(this);
   }
 
   private createStairsTextures() {
@@ -15887,6 +15996,8 @@ class FinalApartmentScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(51);
+
+    createRestartLevelButton(this);
   }
 
   private createFinalTextures() {
