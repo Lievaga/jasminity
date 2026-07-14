@@ -16133,7 +16133,7 @@ const config: Phaser.Types.Core.GameConfig = {
     width: 960,
     height: 540,
   },
-  parent: "app",
+  parent: "game-container",
   backgroundColor: "#87ceeb",
 
   physics: {
